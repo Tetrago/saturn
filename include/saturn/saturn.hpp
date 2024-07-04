@@ -6,6 +6,7 @@
 #include "instance.hpp"
 #include "logger.hpp"
 #include "physical_device.hpp"
+#include "swap_chain.hpp"
 #include "util.hpp"
 
 #endif

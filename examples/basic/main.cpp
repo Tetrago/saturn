@@ -1,5 +1,8 @@
 #include <saturn/saturn.hpp>
 
+#include "saturn/physical_device.hpp"
+#include "saturn/swap_chain.hpp"
+
 namespace crit = sat::criterion;
 namespace dev  = sat::device;
 
@@ -53,34 +56,58 @@ int main()
 	    sat::PhysicalDeviceSelector(instance)
 	        .prefer(crit::weigh_devices())
 	        .require(crit::graphics_queue_family())
-	        .require(crit::surface_support(surface))
+	        .require(crit::present_queue_family(surface))
+	        .require(crit::present_capable(surface))
+	        .require(crit::extension(VK_KHR_SWAPCHAIN_EXTENSION_NAME))
 	        .select()
 	        .value();
 
 	uint32_t graphicsQueueFamily =
 	    dev::find_graphics_queue(physicalDevice).value();
 	uint32_t presentQueueFamily =
-	    dev::find_surface_queue(surface, physicalDevice).value();
+	    dev::find_present_queue(surface, physicalDevice).value();
 
 
 	////////////////
 	//// Device ////
 	////////////////
 
-	auto builder = sat::DeviceBuilder(instance, physicalDevice)
-	                   .addQueue(graphicsQueueFamily);
+	auto deviceBuilder = sat::DeviceBuilder(instance, physicalDevice)
+	                         .addExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME)
+	                         .addQueue(graphicsQueueFamily);
 
 	if (graphicsQueueFamily != presentQueueFamily)
 	{
 		// Don't request two queues unless they're under different families
 
-		builder.addQueue(presentQueueFamily);
+		deviceBuilder.addQueue(presentQueueFamily);
 	}
 
-	sat::rn<sat::Device> device = builder.build();
+	sat::rn<sat::Device> device = deviceBuilder.build();
 
 	VkQueue graphics = device->queue(graphicsQueueFamily);
 	VkQueue preset   = device->queue(presentQueueFamily);
+
+	////////////////////
+	//// Swap Chain ////
+	////////////////////
+
+	int width, height;
+	glfwGetFramebufferSize(pWindow, &width, &height);
+
+	auto swapChainBuilder =
+	    sat::SwapChainBuilder(device, surface)
+	        .selectSurfaceFormat(VK_FORMAT_B8G8R8A8_SRGB,
+	                             VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+	        .selectPresentMode(VK_PRESENT_MODE_MAILBOX_KHR)
+	        .extent(width, height);
+
+	if (graphicsQueueFamily != presentQueueFamily)
+	{
+		swapChainBuilder.share({{graphicsQueueFamily, presentQueueFamily}});
+	}
+
+	sat::rn<sat::SwapChain> swapChain = swapChainBuilder.build();
 
 	//////////////
 	//// Loop ////
@@ -95,6 +122,7 @@ int main()
 	//// Cleanup ////
 	/////////////////
 
+	swapChain.reset();
 	device.reset();
 	vkDestroySurfaceKHR(instance->handle(), surface, nullptr);
 	instance.reset();

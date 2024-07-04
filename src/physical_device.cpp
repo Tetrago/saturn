@@ -1,9 +1,12 @@
 #include "physical_device.hpp"
 
+#include <cstring>
 #include <limits>
 #include <sstream>
 
 #include "instance.hpp"
+#include "local.hpp"
+#include "swap_chain.hpp"
 
 namespace sat
 {
@@ -28,6 +31,13 @@ namespace sat
 			vkGetPhysicalDeviceQueueFamilyProperties(
 			    handle, &count, device.queueFamilies.data());
 
+			// Get device extensions
+			vkEnumerateDeviceExtensionProperties(
+			    handle, nullptr, &count, nullptr);
+			device.extensions.resize(count);
+			vkEnumerateDeviceExtensionProperties(
+			    handle, nullptr, &count, device.extensions.data());
+
 			return device;
 		}
 
@@ -47,7 +57,7 @@ namespace sat
 			return std::nullopt;
 		}
 
-		std::optional<uint32_t> find_surface_queue(
+		std::optional<uint32_t> find_present_queue(
 		    VkSurfaceKHR surface, const PhysicalDevice& device) noexcept
 		{
 			VkBool32 result;
@@ -82,8 +92,7 @@ namespace sat
 		{
 			// If no devices were found
 
-			instance_->logger().log(LogLevel::Error,
-			                        "Found no available physical devices");
+			S_ERROR(instance_, "Found no available physical devices");
 		}
 		else
 		{
@@ -100,7 +109,7 @@ namespace sat
 				devices_[i] = std::make_pair(devices[i], 0);
 			}
 
-			instance_->logger().log(LogLevel::Info, oss.str());
+			S_INFO(instance_, oss.str());
 		}
 	}
 
@@ -121,10 +130,9 @@ namespace sat
 			{
 				// If device fails condition and it is required
 
-				instance_->logger().log(
-				    LogLevel::Trace,
-				    "Physical device `{}` failed to meet criterion",
-				    it->first.properties.deviceName);
+				S_TRACE(instance_,
+				        "Physical device `{}` failed to meet criterion",
+				        it->first.properties.deviceName);
 
 				it = devices_.erase(it);
 			}
@@ -152,8 +160,7 @@ namespace sat
 	{
 		if (devices_.empty())
 		{
-			instance_->logger().log(LogLevel::Warn,
-			                        "Failed to find suitable physical device");
+			S_WARN(instance_, "Failed to find suitable physical device");
 			return std::nullopt;
 		}
 
@@ -170,9 +177,8 @@ namespace sat
 			}
 		}
 
-		instance_->logger().log(LogLevel::Info,
-		                        "Selected device: {}",
-		                        pDevice->properties.deviceName);
+		S_INFO(
+		    instance_, "Selected device: {}", pDevice->properties.deviceName);
 
 		return *pDevice;
 	}
@@ -215,12 +221,39 @@ namespace sat
 			};
 		}
 
-		PhysicalDeviceCriterion surface_support(VkSurfaceKHR surface,
-		                                        int bias) noexcept
+		PhysicalDeviceCriterion present_queue_family(VkSurfaceKHR surface,
+		                                             int bias) noexcept
 		{
 			return [=](const PhysicalDevice& device) -> std::optional<int> {
-				return device::find_surface_queue(surface, device).has_value()
+				return device::find_present_queue(surface, device).has_value()
 				           ? std::optional(bias)
+				           : std::nullopt;
+			};
+		}
+
+		PhysicalDeviceCriterion extension(const char* pExtensionName,
+		                                  int bias) noexcept
+		{
+			return [=](const PhysicalDevice& device) -> std::optional<int> {
+				for (const VkExtensionProperties& props : device.extensions)
+				{
+					if (strcmp(props.extensionName, pExtensionName) == 0)
+					{
+						return bias;
+					}
+				}
+
+				return std::nullopt;
+			};
+		}
+
+		PhysicalDeviceCriterion present_capable(VkSurfaceKHR surface) noexcept
+		{
+			return [=](const PhysicalDevice& device) -> std::optional<int> {
+				SwapChainDetails details = swap_chain::query(device, surface);
+
+				return !details.formats.empty() && !details.presentModes.empty()
+				           ? std::optional(0)
 				           : std::nullopt;
 			};
 		}

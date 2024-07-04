@@ -2,6 +2,7 @@
 #define SATURN_PHYSICAL_DEVICE_HPP
 
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 #include <functional>
 #include <optional>
@@ -23,6 +24,7 @@ namespace sat
 		VkPhysicalDeviceProperties properties;
 		VkPhysicalDeviceFeatures features;
 		std::vector<VkQueueFamilyProperties> queueFamilies;
+		std::vector<VkExtensionProperties> extensions;
 	};
 
 	namespace device
@@ -32,7 +34,7 @@ namespace sat
 		SATURN_API std::optional<uint32_t> find_graphics_queue(
 		    const PhysicalDevice& device) noexcept;
 
-		SATURN_API std::optional<uint32_t> find_surface_queue(
+		SATURN_API std::optional<uint32_t> find_present_queue(
 		    VkSurfaceKHR surface, const PhysicalDevice& device) noexcept;
 	} // namespace device
 
@@ -92,7 +94,16 @@ namespace sat
 		graphics_queue_family(int bias = 1000) noexcept;
 
 		SATURN_API PhysicalDeviceCriterion
-		surface_support(VkSurfaceKHR surface, int bias = 1000) noexcept;
+		present_queue_family(VkSurfaceKHR surface, int bias = 1000) noexcept;
+
+		SATURN_API PhysicalDeviceCriterion extension(const char* pExtensionName,
+		                                             int bias = 1000) noexcept;
+
+		/**
+		 * \brief Ensures there are available surface formats and present modes
+		 */
+		SATURN_API PhysicalDeviceCriterion
+		present_capable(VkSurfaceKHR surface) noexcept;
 	} // namespace criterion
 } // namespace sat
 

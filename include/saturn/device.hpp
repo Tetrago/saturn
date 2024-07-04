@@ -29,6 +29,8 @@ namespace sat
 		 */
 		DeviceBuilder& addQueue(uint32_t index, float priority = 1) noexcept;
 
+		DeviceBuilder& addExtension(const char* pExtensionName) noexcept;
+
 		rn<Device> build() const;
 
 	private:
@@ -37,6 +39,7 @@ namespace sat
 		rn<Instance> instance_;
 		PhysicalDevice device_;
 		std::unordered_map<uint32_t, std::vector<float>> queues_;
+		std::vector<const char*> extensions_;
 	};
 
 	////////////////
@@ -56,6 +59,8 @@ namespace sat
 		VkDevice handle() const noexcept { return handle_; }
 
 		Instance& instance() const noexcept { return *instance_; }
+
+		const PhysicalDevice& device() const noexcept { return device_; }
 
 	private:
 		friend class DeviceBuilder;

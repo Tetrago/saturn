@@ -1,6 +1,6 @@
 #include "instance.hpp"
 
-#include <vulkan/vulkan_core.h>
+#include <sstream>
 
 #include "local.hpp"
 #include "physical_device.hpp"
@@ -151,6 +151,32 @@ namespace sat
 		    !evaluate_instance_layers(logger(), builder.layers_))
 		{
 			throw std::runtime_error("Missing required features");
+		}
+		else
+		{
+			// Dump instance extensions
+
+			std::ostringstream oss;
+			oss << "Loading instance extenions:";
+
+			for (const char* pExtensionName : builder.extensions_)
+			{
+				oss << "\n - " << pExtensionName;
+			}
+
+			logger_->log(LogLevel::Info, oss.str());
+
+			// Dump instance layers
+
+			oss.str("");
+			oss << "Loading instance layers:";
+
+			for (const char* pLayerName : builder.layers_)
+			{
+				oss << "\n - " << pLayerName;
+			}
+
+			logger_->log(LogLevel::Info, oss.str());
 		}
 
 		VkApplicationInfo appInfo{};

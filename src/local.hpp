@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <unordered_set>
 
+#include "instance.hpp"
 #include "logger.hpp"
 #include "util.hpp"
 
@@ -56,7 +57,7 @@ namespace sat
 			}
 		}
 
-		logger.log(LogLevel::Info, oss.str());
+		logger.log(LogLevel::Trace, oss.str());
 
 		if (remaining.empty())
 		{
@@ -81,5 +82,17 @@ namespace sat
 		}
 	}
 } // namespace sat
+
+#define S_TRACE(instance, ...) \
+	(instance)->logger().log(LogLevel::Trace, __VA_ARGS__)
+
+#define S_INFO(instance, ...) \
+	(instance)->logger().log(LogLevel::Info, __VA_ARGS__)
+
+#define S_WARN(instance, ...) \
+	(instance)->logger().log(LogLevel::Warn, __VA_ARGS__)
+
+#define S_ERROR(instance, ...) \
+	(instance)->logger().log(LogLevel::Error, __VA_ARGS__)
 
 #endif
