@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "core.hpp"
+#include "device.hpp"
 
 namespace sat
 {
@@ -62,7 +63,7 @@ namespace sat
 		SwapChainBuilder& share(
 		    std::span<uint32_t const> queueFamilies) noexcept;
 
-		rn<SwapChain> build();
+		rn<SwapChain> build() const;
 
 	private:
 		friend class SwapChain;
@@ -82,6 +83,8 @@ namespace sat
 	//// Swap Chain ////
 	////////////////////
 
+	class Logger;
+
 	class SATURN_API SwapChain
 	{
 	public:
@@ -92,10 +95,16 @@ namespace sat
 
 		VkSwapchainKHR handle() const noexcept { return handle_; }
 
+		VkFormat format() const noexcept { return format_; }
+
+		const VkExtent2D& extent() const noexcept { return extent_; }
+
 	private:
 		friend class SwapChainBuilder;
 
 		SwapChain(const SwapChainBuilder& builder);
+
+		Logger& logger() const noexcept { return device_->instance().logger(); }
 
 		sat::rn<Device> device_;
 		VkSwapchainKHR handle_;

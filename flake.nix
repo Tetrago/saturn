@@ -10,6 +10,7 @@
     devShells.default = (pkgs.mkShell.override { stdenv = pkgs.llvmPackages.stdenv; }) {
       buildInputs = with pkgs; [
         glfw
+        shaderc
         vulkan-headers
         vulkan-loader
       ];

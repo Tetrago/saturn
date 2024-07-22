@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <limits>
 
-#include "device.hpp"
 #include "local.hpp"
 #include "physical_device.hpp"
 
@@ -144,7 +143,7 @@ namespace sat
 		return *this;
 	}
 
-	rn<SwapChain> SwapChainBuilder::build()
+	rn<SwapChain> SwapChainBuilder::build() const
 	{
 		return rn<SwapChain>(new SwapChain(*this));
 	}
@@ -193,7 +192,6 @@ namespace sat
 
 		VK_CALL(vkCreateSwapchainKHR(
 		            device_->handle(), &createInfo, nullptr, &handle_),
-		        device_->instance().logger(),
 		        "Failed to create swap chain");
 
 		////////////////
@@ -206,10 +204,10 @@ namespace sat
 		vkGetSwapchainImagesKHR(
 		    device_->handle(), handle_, &count, images_.data());
 
-		S_TRACE(&device_->instance(),
-		        "Created a {}x{} swap chain with {} images",
+		S_TRACE("Created {}x{} swap chain " S_PTR " with {} images",
 		        builder.extent_.width,
 		        builder.extent_.height,
+		        S_THIS,
 		        count);
 
 		/////////////////////
@@ -235,15 +233,42 @@ namespace sat
 		{
 			viewInfo.image = images_[count];
 
-			VK_CALL(vkCreateImageView(
-			            device_->handle(), &viewInfo, nullptr, &views_[count]),
-			        device_->instance().logger(),
-			        "Failed to create image view");
+			if (vkCreateImageView(
+			        device_->handle(), &viewInfo, nullptr, &views_[count]) !=
+			    VK_SUCCESS)
+			{
+				goto abort;
+			}
 		}
 
-		S_TRACE(&device_->instance(),
-		        "Created {} swap chain image views",
-		        views_.size());
+		S_TRACE("Created {} swap chain image views", views_.size());
+
+		return;
+
+		///////////////
+		//// Abort ////
+		///////////////
+
+	abort:
+
+		S_ERROR(
+		    "Aborting during swap chain initialization due to failure to "
+		    "create image views");
+
+		while (++count < views_.size())
+		{
+			vkDestroyImageView(device_->handle(), views_[count], nullptr);
+		}
+
+		S_TRACE("Destroyed swap chain image views while aborting");
+
+		vkDestroySwapchainKHR(device_->handle(), handle_, nullptr);
+
+		S_TRACE("Destroyed swap chain " S_PTR
+		        " while aborting failed image view creation",
+		        S_THIS);
+
+		throw std::runtime_error("Failed to create swap chain image views");
 	}
 
 	SwapChain::~SwapChain() noexcept
@@ -253,12 +278,10 @@ namespace sat
 			vkDestroyImageView(device_->handle(), view, nullptr);
 		}
 
-		S_TRACE(&device_->instance(),
-		        "Destroyed {} swap chain image views",
-		        views_.size());
+		S_TRACE("Destroyed {} swap chain image views", views_.size());
 
 		vkDestroySwapchainKHR(device_->handle(), handle_, nullptr);
 
-		S_TRACE(&device_->instance(), "Destroyed swap chain");
+		S_TRACE("Destroyed swap chain " S_PTR, S_THIS);
 	}
 } // namespace sat

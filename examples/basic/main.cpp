@@ -1,6 +1,10 @@
+#include <vulkan/vulkan_core.h>
+
 #include <saturn/saturn.hpp>
 
 #include "saturn/physical_device.hpp"
+#include "saturn/pipeline.hpp"
+#include "saturn/render_pass.hpp"
 #include "saturn/swap_chain.hpp"
 
 namespace crit = sat::criterion;
@@ -109,6 +113,38 @@ int main()
 
 	sat::rn<sat::SwapChain> swapChain = swapChainBuilder.build();
 
+	/////////////////////
+	//// Render Pass ////
+	/////////////////////
+
+	sat::rn<sat::RenderPass> renderPass =
+	    sat::RenderPassBuilder(device)
+	        .createColorAttachment(swapChain->format())
+	        .begin()
+	        .addColorAttachment(0)
+	        .end()
+	        .build();
+
+	/////////////////
+	//// Shaders ////
+	/////////////////
+
+	sat::ShaderLoader loader(device);
+	sat::rn<sat::Shader> vert = loader.fromFile("basic.vert.spv");
+	sat::rn<sat::Shader> frag = loader.fromFile("basic.frag.spv");
+
+	//////////////////
+	//// Pipeline ////
+	//////////////////
+
+	sat::rn<sat::Pipeline> pipeline =
+	    sat::PipelineBuilder(device, swapChain, renderPass)
+	        .addStage(VK_SHADER_STAGE_VERTEX_BIT, vert)
+	        .addStage(VK_SHADER_STAGE_FRAGMENT_BIT, frag)
+	        .addDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
+	        .addDynamicState(VK_DYNAMIC_STATE_SCISSOR)
+	        .build();
+
 	//////////////
 	//// Loop ////
 	//////////////
@@ -122,6 +158,11 @@ int main()
 	//// Cleanup ////
 	/////////////////
 
+	pipeline.reset();
+	frag.reset();
+	vert.reset();
+
+	renderPass.reset();
 	swapChain.reset();
 	device.reset();
 	vkDestroySurfaceKHR(instance->handle(), surface, nullptr);

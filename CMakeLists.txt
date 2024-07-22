@@ -1,7 +1,9 @@
-cmake_minimum_required(VERSION 3.23)
+cmake_minimum_required(VERSION 3.24)
 project(saturn LANGUAGES CXX)
 
 find_package(Vulkan REQUIRED)
+
+set(libraries PUBLIC Vulkan::Vulkan)
 
 set(definitions PRIVATE SATURN_BUILD)
 
@@ -11,12 +13,24 @@ set(headers
 	"include/saturn/instance.hpp"
 	"include/saturn/logger.hpp"
 	"include/saturn/physical_device.hpp"
+	"include/saturn/pipeline.hpp"
+	"include/saturn/shader.hpp"
 	"include/saturn/swap_chain.hpp"
+	"include/saturn/render_pass.hpp"
 	"include/saturn/util.hpp"
+	"src/local.hpp"
 )
 
-set(sources "src/instance.cpp" "src/device.cpp" "src/logger.cpp"
-			"src/physical_device.cpp" "src/swap_chain.cpp" "src/util.cpp"
+set(sources
+	"src/device.cpp"
+	"src/instance.cpp"
+	"src/logger.cpp"
+	"src/physical_device.cpp"
+	"src/pipeline.cpp"
+	"src/render_pass.cpp"
+	"src/shader.cpp"
+	"src/swap_chain.cpp"
+	"src/util.cpp"
 )
 
 option(SATURN_BUILD_SHARED "Whether to build saturn as a shared library"
@@ -39,7 +53,7 @@ target_include_directories(
 	PRIVATE "include/saturn" "src"
 )
 
-target_link_libraries(${PROJECT_NAME} PUBLIC Vulkan::Vulkan)
+target_link_libraries(${PROJECT_NAME} ${libraries})
 
 target_compile_definitions(${PROJECT_NAME} ${definitions})
 

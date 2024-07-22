@@ -164,7 +164,7 @@ namespace sat
 				oss << "\n - " << pExtensionName;
 			}
 
-			logger_->log(LogLevel::Info, oss.str());
+			S_INFO(oss.str());
 
 			// Dump instance layers
 
@@ -176,7 +176,7 @@ namespace sat
 				oss << "\n - " << pLayerName;
 			}
 
-			logger_->log(LogLevel::Info, oss.str());
+			S_INFO(oss.str());
 		}
 
 		VkApplicationInfo appInfo{};
@@ -217,27 +217,22 @@ namespace sat
 #endif
 
 		VK_CALL(vkCreateInstance(&createInfo, nullptr, &handle_),
-		        logger(),
 		        "Failed to create VkInstance");
 
-		logger_->log(
-		    LogLevel::Trace, "Created instance `{}`", builder.appName_);
+		S_TRACE("Created instance " S_PTR " `{}`", S_THIS, builder.appName_);
 
 #if SATURN_ENABLE_VALIDATION
 		auto fn = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
 		    vkGetInstanceProcAddr(handle_, "vkCreateDebugUtilsMessengerEXT"));
-		if (fn != nullptr)
+		if (fn == nullptr ||
+		    fn(handle_, &messengerInfo, nullptr, &messenger_) != VK_SUCCESS)
 		{
-			VK_CALL(fn(handle_, &messengerInfo, nullptr, &messenger_),
-			        logger(),
-			        "Failed to create VkDebugUtilsMessengerEXT");
+			S_WARN("Unable to create debug messenger");
 		}
 		else
 		{
-			logger_->log(LogLevel::Warn, "Unable to create debug messenger");
+			S_TRACE("Created debug messenger");
 		}
-
-		logger_->log(LogLevel::Trace, "Created debug messenger");
 #endif
 	}
 
@@ -253,20 +248,19 @@ namespace sat
 			if (fn != nullptr)
 			{
 				fn(handle_, messenger_, nullptr);
+
+				S_TRACE("Destroyed debug messenger");
 			}
 			else
 			{
-				logger_->log(LogLevel::Error,
-				             "Unable to destroy debug messenger");
+				S_ERROR("Unable to destroy debug messenger");
 			}
-
-			logger_->log(LogLevel::Trace, "Destroyed debug messenger");
 		}
 #endif
 
 		vkDestroyInstance(handle_, nullptr);
 
-		logger_->log(LogLevel::Trace, "Destroyed instance");
+		S_TRACE("Destroyed instance " S_PTR, S_THIS);
 	}
 
 	std::vector<PhysicalDevice> Instance::devices() const noexcept
@@ -274,7 +268,7 @@ namespace sat
 		uint32_t count;
 		vkEnumeratePhysicalDevices(handle_, &count, nullptr);
 
-		logger_->log(LogLevel::Trace, "Found {} physical devices", count);
+		S_TRACE("Found {} physical devices", count);
 
 		std::vector<VkPhysicalDevice> handles(count);
 		vkEnumeratePhysicalDevices(handle_, &count, handles.data());

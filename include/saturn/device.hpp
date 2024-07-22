@@ -7,12 +7,12 @@
 #include <vector>
 
 #include "core.hpp"
+#include "instance.hpp"
 #include "physical_device.hpp"
 
 namespace sat
 {
 	class Device;
-	class Instance;
 
 	////////////////////////
 	//// Device Builder ////
@@ -46,6 +46,8 @@ namespace sat
 	//// Device ////
 	////////////////
 
+	class Logger;
+
 	class SATURN_API Device
 	{
 	public:
@@ -66,6 +68,8 @@ namespace sat
 		friend class DeviceBuilder;
 
 		Device(const DeviceBuilder& builder);
+
+		Logger& logger() const noexcept { return instance_->logger(); }
 
 		VkDevice handle_;
 		rn<Instance> instance_;

@@ -92,7 +92,7 @@ namespace sat
 		{
 			// If no devices were found
 
-			S_ERROR(instance_, "Found no available physical devices");
+			S_ERROR("Found no available physical devices");
 		}
 		else
 		{
@@ -109,7 +109,7 @@ namespace sat
 				devices_[i] = std::make_pair(devices[i], 0);
 			}
 
-			S_INFO(instance_, oss.str());
+			S_INFO(oss.str());
 		}
 	}
 
@@ -130,8 +130,7 @@ namespace sat
 			{
 				// If device fails condition and it is required
 
-				S_TRACE(instance_,
-				        "Physical device `{}` failed to meet criterion",
+				S_TRACE("Physical device `{}` failed to meet criterion",
 				        it->first.properties.deviceName);
 
 				it = devices_.erase(it);
@@ -160,7 +159,7 @@ namespace sat
 	{
 		if (devices_.empty())
 		{
-			S_WARN(instance_, "Failed to find suitable physical device");
+			S_WARN("Failed to find suitable physical device");
 			return std::nullopt;
 		}
 
@@ -177,10 +176,14 @@ namespace sat
 			}
 		}
 
-		S_INFO(
-		    instance_, "Selected device: {}", pDevice->properties.deviceName);
+		S_INFO("Selected device: {}", pDevice->properties.deviceName);
 
 		return *pDevice;
+	}
+
+	Logger& PhysicalDeviceSelector::logger() const noexcept
+	{
+		return instance_->logger();
 	}
 
 	///////////////////////////////////

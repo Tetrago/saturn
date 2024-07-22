@@ -2,7 +2,6 @@
 
 #include <sstream>
 
-#include "instance.hpp"
 #include "local.hpp"
 
 namespace sat
@@ -63,7 +62,7 @@ namespace sat
 				oss << "\n - " << pExtensionName;
 			}
 
-			S_INFO(instance_, oss.str());
+			S_INFO(oss.str());
 		}
 
 		std::vector<VkDeviceQueueCreateInfo> queueInfos;
@@ -88,18 +87,18 @@ namespace sat
 		createInfo.ppEnabledExtensionNames = builder.extensions_.data();
 
 		VK_CALL(vkCreateDevice(device_.handle, &createInfo, nullptr, &handle_),
-		        instance_->logger(),
 		        "Failed to create device");
 
-		S_TRACE(
-		    instance_, "Created device with {} queues", builder.queues_.size());
+		S_TRACE("Created device " S_PTR " with {} queues",
+		        S_THIS,
+		        builder.queues_.size());
 	}
 
 	Device::~Device() noexcept
 	{
 		vkDestroyDevice(handle_, nullptr);
 
-		S_TRACE(instance_, "Destroyed device");
+		S_TRACE("Destroyed device " S_PTR, S_THIS);
 	}
 
 	VkQueue Device::queue(uint32_t family, uint32_t index) const noexcept
@@ -107,8 +106,7 @@ namespace sat
 		VkQueue handle;
 		vkGetDeviceQueue(handle_, family, index, &handle);
 
-		S_TRACE(
-		    instance_, "Retrieving queue family {} index {}", family, index);
+		S_TRACE("Retrieving queue family {} index {}", family, index);
 
 		return handle;
 	}

@@ -42,6 +42,8 @@ namespace sat
 	//// Physical Device Selector ////
 	//////////////////////////////////
 
+	class Logger;
+
 	/**
 	 * Filters or biases specific device properties when selecting an
 	 * appropriate physical device in a \ref PhysicalDeviceSelector.
@@ -65,6 +67,8 @@ namespace sat
 		std::optional<PhysicalDevice> select() const noexcept;
 
 	private:
+		Logger& logger() const noexcept;
+
 		rn<Instance> instance_;
 		std::vector<std::pair<PhysicalDevice, int>> devices_;
 	};
