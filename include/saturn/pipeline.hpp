@@ -73,7 +73,7 @@ namespace sat
 	private:
 		friend class PipelineBuilder;
 
-		Pipeline(const PipelineBuilder& builder);
+		explicit Pipeline(const PipelineBuilder& builder);
 
 		Logger& logger() const noexcept { return device_->instance().logger(); }
 

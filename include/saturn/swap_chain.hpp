@@ -95,6 +95,11 @@ namespace sat
 
 		VkSwapchainKHR handle() const noexcept { return handle_; }
 
+		const std::vector<VkImageView>& views() const noexcept
+		{
+			return views_;
+		}
+
 		VkFormat format() const noexcept { return format_; }
 
 		const VkExtent2D& extent() const noexcept { return extent_; }
@@ -102,7 +107,7 @@ namespace sat
 	private:
 		friend class SwapChainBuilder;
 
-		SwapChain(const SwapChainBuilder& builder);
+		explicit SwapChain(const SwapChainBuilder& builder);
 
 		Logger& logger() const noexcept { return device_->instance().logger(); }
 

@@ -8,8 +8,10 @@ set(libraries PUBLIC Vulkan::Vulkan)
 set(definitions PRIVATE SATURN_BUILD)
 
 set(headers
+	"include/saturn/command.hpp"
 	"include/saturn/core.hpp"
 	"include/saturn/device.hpp"
+	"include/saturn/framebuffer.hpp"
 	"include/saturn/instance.hpp"
 	"include/saturn/logger.hpp"
 	"include/saturn/physical_device.hpp"
@@ -22,7 +24,9 @@ set(headers
 )
 
 set(sources
+	"src/command.cpp"
 	"src/device.cpp"
+	"src/framebuffer.cpp"
 	"src/instance.cpp"
 	"src/logger.cpp"
 	"src/physical_device.cpp"

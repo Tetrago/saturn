@@ -76,7 +76,7 @@ namespace sat
 	private:
 		friend class RenderPassBuilder;
 
-		RenderPass(const RenderPassBuilder& builder);
+		explicit RenderPass(const RenderPassBuilder& builder);
 
 		Logger& logger() const noexcept { return device_->instance().logger(); }
 

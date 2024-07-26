@@ -1,14 +1,18 @@
-#include <vulkan/vulkan_core.h>
-
+#include <iostream>
 #include <saturn/saturn.hpp>
-
-#include "saturn/physical_device.hpp"
-#include "saturn/pipeline.hpp"
-#include "saturn/render_pass.hpp"
-#include "saturn/swap_chain.hpp"
 
 namespace crit = sat::criterion;
 namespace dev  = sat::device;
+
+void debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+                    VkDebugUtilsMessageTypeFlagsEXT type,
+                    std::string_view message)
+{
+	if (severity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+	{
+		std::cout << "[Vulkan] " << message << std::endl;
+	}
+}
 
 int main()
 {
@@ -31,23 +35,20 @@ int main()
 	//// Instance ////
 	//////////////////
 
-	sat::rn<sat::Instance> instance =
-	    sat::InstanceBuilder()
-	        .applicationName("dev")
-	        .applicationVersion(0, 1, 0)
-	        .addGlfwExtensions()
-	        .logger(
-	            sat::make_rn<sat::ConsoleLogger>("dev", sat::LogLevel::Trace),
-	            sat::make_rn<sat::ConsoleLogger>("vulkan", sat::LogLevel::Warn))
-	        .build();
+	sat::rn<sat::Instance> instance = sat::InstanceBuilder()
+	                                      .applicationName("dev")
+	                                      .applicationVersion(0, 1, 0)
+	                                      .addGlfwExtensions()
+	                                      .debugCallback(debug_callback)
+	                                      .build();
 
 	/////////////////
 	//// Surface ////
 	/////////////////
 
 	VkSurfaceKHR surface;
-	if (glfwCreateWindowSurface(
-	        instance->handle(), pWindow, nullptr, &surface) != VK_SUCCESS)
+	if (glfwCreateWindowSurface(instance, pWindow, nullptr, &surface) !=
+	    VK_SUCCESS)
 	{
 		throw std::runtime_error("Failed to create window surface");
 	}
@@ -125,6 +126,24 @@ int main()
 	        .end()
 	        .build();
 
+	//////////////////////
+	//// Framebuffers ////
+	//////////////////////
+
+	std::vector<sat::rn<sat::Framebuffer>> framebuffers;
+	framebuffers.reserve(swapChain->views().size());
+
+	for (VkImageView view : swapChain->views())
+	{
+		sat::rn<sat::Framebuffer> framebuffer =
+		    sat::FramebufferBuilder(device, renderPass)
+		        .extent(swapChain->extent())
+		        .add(view)
+		        .build();
+
+		framebuffers.push_back(framebuffer);
+	}
+
 	/////////////////
 	//// Shaders ////
 	/////////////////
@@ -145,6 +164,17 @@ int main()
 	        .addDynamicState(VK_DYNAMIC_STATE_SCISSOR)
 	        .build();
 
+	/////////////////
+	//// Command ////
+	/////////////////
+
+	sat::rn<sat::CommandPool> pool = sat::CommandPoolBuilder(device)
+	                                     .queueFamilyIndex(graphicsQueueFamily)
+	                                     .reset()
+	                                     .build();
+
+	sat::CommandBuffer buffer = pool->allocate();
+
 	//////////////
 	//// Loop ////
 	//////////////
@@ -158,14 +188,21 @@ int main()
 	//// Cleanup ////
 	/////////////////
 
+	pool.reset();
+
 	pipeline.reset();
 	frag.reset();
 	vert.reset();
 
+	for (sat::rn<sat::Framebuffer>& framebuffer : framebuffers)
+	{
+		framebuffer.reset();
+	}
+
 	renderPass.reset();
 	swapChain.reset();
 	device.reset();
-	vkDestroySurfaceKHR(instance->handle(), surface, nullptr);
+	vkDestroySurfaceKHR(instance, surface, nullptr);
 	instance.reset();
 
 	glfwDestroyWindow(pWindow);

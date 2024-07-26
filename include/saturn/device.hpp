@@ -67,7 +67,7 @@ namespace sat
 	private:
 		friend class DeviceBuilder;
 
-		Device(const DeviceBuilder& builder);
+		explicit Device(const DeviceBuilder& builder);
 
 		Logger& logger() const noexcept { return instance_->logger(); }
 
