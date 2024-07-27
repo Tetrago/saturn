@@ -4,27 +4,27 @@
 #include <vulkan/vulkan.h>
 
 #include "core.hpp"
-#include "device.hpp"
-#include "instance.hpp"
+#include "saturn/framebuffer.hpp"
 
 namespace sat
 {
 	class CommandBuffer;
 	class CommandPool;
+	class Device;
+	class Pipeline;
 
 	//////////////////////////////
 	//// Command Pool Builder ////
 	//////////////////////////////
 
 	class SATURN_API CommandPoolBuilder
+	    : public Builder<CommandPoolBuilder, CommandPool>
 	{
 	public:
 		explicit CommandPoolBuilder(rn<Device> device) noexcept;
 
 		CommandPoolBuilder& queueFamilyIndex(uint32_t index) noexcept;
 		CommandPoolBuilder& reset() noexcept;
-
-		rn<CommandPool> build() const;
 
 	private:
 		friend class CommandPool;
@@ -38,7 +38,7 @@ namespace sat
 	//// Command Pool ////
 	//////////////////////
 
-	class SATURN_API CommandPool
+	class SATURN_API CommandPool : public Container<VkCommandPool>
 	{
 	public:
 		~CommandPool() noexcept;
@@ -46,46 +46,60 @@ namespace sat
 		CommandPool(const CommandPool&)            = delete;
 		CommandPool& operator=(const CommandPool&) = delete;
 
-		VkCommandPool handle() const noexcept { return handle_; }
+		CommandBuffer allocate() const;
+		void free(CommandBuffer& buffer) const noexcept;
 
 	private:
 		friend class CommandBuffer;
-		friend class CommandPoolBuilder;
+		friend class Builder<CommandPoolBuilder, CommandPool>;
 
 		explicit CommandPool(const CommandPoolBuilder& builder);
 
-		VkCommandBuffer allocate() const;
-		void free(VkCommandBuffer handle) const noexcept;
-
-		Logger& logger() const noexcept { return device_->instance().logger(); }
-
 		rn<Device> device_;
-		VkCommandPool handle_;
 	};
 
 	////////////////////////
 	//// Command Buffer ////
 	////////////////////////
 
-	class CommandBuffer
+	class SATURN_API CommandBuffer : public Container<VkCommandBuffer>
 	{
 	public:
-		explicit CommandBuffer(const rn<CommandPool>& pool);
-		~CommandBuffer() noexcept;
+		CommandBuffer() noexcept = default;
 
 		CommandBuffer(const CommandBuffer&)            = delete;
 		CommandBuffer& operator=(const CommandBuffer&) = delete;
 		CommandBuffer(CommandBuffer&& other) noexcept;
 		CommandBuffer& operator=(CommandBuffer&& other) noexcept;
 
-		void begin();
-		void end();
+		void record();
+		void stop();
+		void reset();
 
-		VkCommandBuffer handle() const noexcept { return handle_; }
+		void begin(const rn<RenderPass>& renderPass,
+		           const rn<Framebuffer>& framebuffer,
+		           const VkExtent2D& extent,
+		           const VkOffset2D& offset = {0, 0}) noexcept;
+		void end() noexcept;
+
+		void viewport(const VkExtent2D& extent,
+		              const VkOffset2D& offset = {0, 0},
+		              float min                = 0,
+		              float max                = 1) noexcept;
+		void viewport(const VkViewport& viewport) noexcept;
+
+		void scissor(const VkExtent2D& extent,
+		             const VkOffset2D& offset = {0, 0}) noexcept;
+		void scissor(const VkRect2D& scissor) noexcept;
+
+		void bind(const rn<Pipeline>& pipeline) noexcept;
+
+		void draw(uint32_t count, uint32_t index = 0) noexcept;
 
 	private:
-		std::weak_ptr<CommandPool> pool_;
-		VkCommandBuffer handle_ = VK_NULL_HANDLE;
+		friend class CommandPool;
+
+		explicit CommandBuffer(VkCommandBuffer handle);
 	};
 } // namespace sat
 

@@ -6,26 +6,24 @@
 #include <vector>
 
 #include "core.hpp"
-#include "device.hpp"
-#include "instance.hpp"
 
 namespace sat
 {
 	class RenderPass;
+	class Device;
+	class Pipeline;
 	class Shader;
-	class SwapChain;
+	class Swapchain;
 
 	//////////////////////////
 	//// Pipeline Builder ////
 	//////////////////////////
 
-	class Pipeline;
-
-	class SATURN_API PipelineBuilder
+	class SATURN_API PipelineBuilder : public Builder<PipelineBuilder, Pipeline>
 	{
 	public:
 		PipelineBuilder(rn<Device> device,
-		                rn<SwapChain> swapChain,
+		                rn<Swapchain> swapchain,
 		                rn<RenderPass> renderPass) noexcept;
 
 		PipelineBuilder& addStage(VkShaderStageFlagBits stage,
@@ -39,13 +37,11 @@ namespace sat
 		PipelineBuilder& frontFace(VkFrontFace frontFace) noexcept;
 		PipelineBuilder& subpass(uint32_t subpass) noexcept;
 
-		sat::rn<Pipeline> build() const;
-
 	private:
 		friend class Pipeline;
 
 		rn<Device> device_;
-		rn<SwapChain> swapChain_;
+		rn<Swapchain> swapchain_;
 		rn<RenderPass> renderPass_;
 		std::vector<VkPipelineShaderStageCreateInfo> stages_;
 		std::vector<rn<Shader>> shaders_;
@@ -60,7 +56,7 @@ namespace sat
 	//// Pipeline ////
 	//////////////////
 
-	class SATURN_API Pipeline
+	class SATURN_API Pipeline : public Container<VkPipeline>
 	{
 	public:
 		~Pipeline() noexcept;
@@ -68,20 +64,15 @@ namespace sat
 		Pipeline(const Pipeline&)            = delete;
 		Pipeline& operator=(const Pipeline&) = delete;
 
-		VkPipeline handle() const noexcept { return handle_; }
-
 	private:
-		friend class PipelineBuilder;
+		friend class Builder<PipelineBuilder, Pipeline>;
 
 		explicit Pipeline(const PipelineBuilder& builder);
 
-		Logger& logger() const noexcept { return device_->instance().logger(); }
-
 		rn<Device> device_;
-		rn<SwapChain> swapChain_;
+		rn<Swapchain> swapchain_;
 		rn<RenderPass> renderPass_;
 		VkPipelineLayout layout_;
-		VkPipeline handle_;
 	};
 } // namespace sat
 

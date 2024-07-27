@@ -1,6 +1,9 @@
 #include "command.hpp"
 
-#include "local.hpp"
+#include "device.hpp"
+#include "error.hpp"
+#include "pipeline.hpp"
+#include "render_pass.hpp"
 
 namespace sat
 {
@@ -25,11 +28,6 @@ namespace sat
 		return *this;
 	}
 
-	rn<CommandPool> CommandPoolBuilder::build() const
-	{
-		return rn<CommandPool>(new CommandPool(*this));
-	}
-
 	//////////////////////
 	//// Command Pool ////
 	//////////////////////
@@ -46,21 +44,16 @@ namespace sat
 			createInfo.flags |= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 		}
 
-		VK_CALL(vkCreateCommandPool(
-		            device_->handle(), &createInfo, nullptr, &handle_),
-		        "Failed to create command pool");
-
-		S_TRACE("Created command pool " S_PTR, S_THIS);
+		SATURN_CALL(
+		    vkCreateCommandPool(device_, &createInfo, nullptr, &handle_));
 	}
 
 	CommandPool::~CommandPool() noexcept
 	{
-		vkDestroyCommandPool(device_->handle(), handle_, nullptr);
-
-		S_TRACE("Destroyed command pool " S_PTR, S_THIS);
+		vkDestroyCommandPool(device_, handle_, nullptr);
 	}
 
-	VkCommandBuffer CommandPool::allocate() const
+	CommandBuffer CommandPool::allocate() const
 	{
 		VkCommandBufferAllocateInfo allocInfo{};
 		allocInfo.sType       = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -69,80 +62,124 @@ namespace sat
 		allocInfo.commandBufferCount = 1;
 
 		VkCommandBuffer handle;
-		VK_CALL(
-		    vkAllocateCommandBuffers(device_->handle(), &allocInfo, &handle),
-		    "Failed to allocate command buffer");
+		SATURN_CALL(vkAllocateCommandBuffers(device_, &allocInfo, &handle));
 
-		return handle;
+		return CommandBuffer(handle);
 	}
 
-	void CommandPool::free(VkCommandBuffer handle) const noexcept
+	void CommandPool::free(CommandBuffer& buffer) const noexcept
 	{
-		vkFreeCommandBuffers(device_->handle(), handle_, 1, &handle);
+		vkFreeCommandBuffers(device_, handle_, 1, &buffer.handle_);
+		buffer = CommandBuffer();
 	}
 
 	////////////////////////
 	//// Command Buffer ////
 	////////////////////////
 
-	CommandBuffer::CommandBuffer(const rn<CommandPool>& pool)
-	    : pool_(pool)
+	CommandBuffer::CommandBuffer(VkCommandBuffer handle)
 	{
-		if (auto pool = pool_.lock())
-		{
-			handle_ = pool->allocate();
-
-			S_TRACE("Created command buffer " S_PTR, S_THIS);
-		}
-		else
-		{
-			throw std::runtime_error(
-			    "Attempting to create command buffer with deallocated pool");
-		}
-	}
-
-	CommandBuffer::~CommandBuffer() noexcept
-	{
-		if (handle_ == VK_NULL_HANDLE) return;
-
-		if (auto pool = pool_.lock())
-		{
-			pool->free(handle_);
-
-			S_TRACE("Destroyed command buffer " S_PTR, S_THIS);
-		}
-		else
-		{
-			S_ERROR(
-			    "Attempting to deallocate buffer from destroyed pool " S_PTR,
-			    S_THIS);
-		}
+		handle_ = handle;
 	}
 
 	CommandBuffer::CommandBuffer(CommandBuffer&& other) noexcept
-	    : pool_(std::move(other.pool_)), handle_(other.handle_)
+	    : Container(other.handle_)
 	{}
 
 	CommandBuffer& CommandBuffer::operator=(CommandBuffer&& other) noexcept
 	{
-		pool_   = std::move(other.pool_);
 		handle_ = other.handle_;
+
+		other.handle_ = VK_NULL_HANDLE;
 
 		return *this;
 	}
 
-	void CommandBuffer::begin()
+	void CommandBuffer::record()
 	{
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-		VK_CALL(vkBeginCommandBuffer(handle_, &beginInfo),
-		        "Failed to begin recording command buffer");
+		SATURN_CALL(vkBeginCommandBuffer(handle_, &beginInfo));
 	}
 
-	void CommandBuffer::end()
+	void CommandBuffer::stop()
 	{
-		VK_CALL(vkEndCommandBuffer(handle_),
-		        "Failed to end recording command buffer");
+		SATURN_CALL(vkEndCommandBuffer(handle_));
+	}
+
+	void CommandBuffer::reset()
+	{
+		SATURN_CALL(vkResetCommandBuffer(handle_, 0));
+	}
+
+	void CommandBuffer::begin(const rn<RenderPass>& renderPass,
+	                          const rn<Framebuffer>& framebuffer,
+	                          const VkExtent2D& extent,
+	                          const VkOffset2D& offset) noexcept
+	{
+		VkRenderPassBeginInfo beginInfo{};
+		beginInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		beginInfo.renderPass        = renderPass;
+		beginInfo.framebuffer       = framebuffer;
+		beginInfo.renderArea.offset = offset;
+		beginInfo.renderArea.extent = extent;
+
+		VkClearValue clearValue   = {{0, 0, 0, 1}};
+		beginInfo.clearValueCount = 1;
+		beginInfo.pClearValues    = &clearValue;
+
+		vkCmdBeginRenderPass(handle_, &beginInfo, VK_SUBPASS_CONTENTS_INLINE);
+	}
+
+	void CommandBuffer::end() noexcept
+	{
+		vkCmdEndRenderPass(handle_);
+	}
+
+	void CommandBuffer::viewport(const VkExtent2D& extent,
+	                             const VkOffset2D& offset,
+	                             float min,
+	                             float max) noexcept
+	{
+		VkViewport viewport{};
+		viewport.x        = offset.x;
+		viewport.y        = offset.y;
+		viewport.width    = extent.width;
+		viewport.height   = extent.height;
+		viewport.minDepth = min;
+		viewport.maxDepth = max;
+
+		this->viewport(viewport);
+	}
+
+	void CommandBuffer::viewport(const VkViewport& viewport) noexcept
+	{
+		vkCmdSetViewport(handle_, 0, 1, &viewport);
+	}
+
+	void CommandBuffer::scissor(const VkExtent2D& extent,
+	                            const VkOffset2D& offset) noexcept
+	{
+		VkRect2D scissor{};
+		scissor.offset = offset;
+		scissor.extent = extent;
+
+		this->scissor(scissor);
+	}
+
+	void CommandBuffer::scissor(const VkRect2D& scissor) noexcept
+	{
+		vkCmdSetScissor(handle_, 0, 1, &scissor);
+	}
+
+	void CommandBuffer::bind(const rn<Pipeline>& pipeline) noexcept
+	{
+		vkCmdBindPipeline(handle_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	}
+
+	void CommandBuffer::draw(uint32_t count, uint32_t index) noexcept
+	{
+		vkCmdDraw(handle_, count, 1, index, 0);
 	}
 } // namespace sat

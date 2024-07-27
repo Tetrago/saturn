@@ -2,8 +2,8 @@
 
 #include <fstream>
 
-#include "instance.hpp"
-#include "local.hpp"
+#include "device.hpp"
+#include "error.hpp"
 
 namespace sat
 {
@@ -17,8 +17,6 @@ namespace sat
 		std::ifstream file(path, std::ios::binary);
 		if (!file.is_open())
 		{
-			S_ERROR("File not found: {}", path.string());
-
 			throw std::runtime_error("Failed to load shader from file");
 		}
 
@@ -56,17 +54,12 @@ namespace sat
 		createInfo.codeSize = byteSize;
 		createInfo.pCode    = pBinary;
 
-		VK_CALL(vkCreateShaderModule(
-		            device_->handle(), &createInfo, nullptr, &handle_),
-		        "Failed to create shader module");
-
-		S_TRACE("Created shader module " S_PTR, S_THIS);
+		SATURN_CALL(
+		    vkCreateShaderModule(device_, &createInfo, nullptr, &handle_));
 	}
 
 	Shader::~Shader() noexcept
 	{
-		vkDestroyShaderModule(device_->handle(), handle_, nullptr);
-
-		S_TRACE("Destroyed shader module " S_PTR, S_THIS);
+		vkDestroyShaderModule(device_, handle_, nullptr);
 	}
 } // namespace sat

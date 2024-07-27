@@ -2,11 +2,9 @@
 
 #include <cstring>
 #include <limits>
-#include <sstream>
 
 #include "instance.hpp"
-#include "local.hpp"
-#include "swap_chain.hpp"
+#include "swapchain.hpp"
 
 namespace sat
 {
@@ -82,34 +80,21 @@ namespace sat
 	//// Physical Device Selector ////
 	//////////////////////////////////
 
-	PhysicalDeviceSelector::PhysicalDeviceSelector(
-	    rn<Instance> instance) noexcept
+	PhysicalDeviceSelector::PhysicalDeviceSelector(rn<Instance> instance)
 	    : instance_(std::move(instance))
 	{
 		std::vector<PhysicalDevice> devices = instance_->devices();
 
 		if (devices.empty())
 		{
-			// If no devices were found
-
-			S_ERROR("Found no available physical devices");
+			throw std::runtime_error("Found no available physical devices");
 		}
-		else
+
+		devices_.resize(devices.size());
+
+		for (int i = 0; i < devices.size(); ++i)
 		{
-			// If devices were found
-
-			std::ostringstream oss;
-			oss << "Found physical devices:";
-
-			devices_.resize(devices.size());
-
-			for (int i = 0; i < devices.size(); ++i)
-			{
-				oss << "\n - " << devices[i].properties.deviceName;
-				devices_[i] = std::make_pair(devices[i], 0);
-			}
-
-			S_INFO(oss.str());
+			devices_[i] = std::make_pair(devices[i], 0);
 		}
 	}
 
@@ -129,9 +114,6 @@ namespace sat
 			else
 			{
 				// If device fails condition and it is required
-
-				S_TRACE("Physical device `{}` failed to meet criterion",
-				        it->first.properties.deviceName);
 
 				it = devices_.erase(it);
 			}
@@ -159,7 +141,6 @@ namespace sat
 	{
 		if (devices_.empty())
 		{
-			S_WARN("Failed to find suitable physical device");
 			return std::nullopt;
 		}
 
@@ -176,14 +157,7 @@ namespace sat
 			}
 		}
 
-		S_INFO("Selected device: {}", pDevice->properties.deviceName);
-
 		return *pDevice;
-	}
-
-	Logger& PhysicalDeviceSelector::logger() const noexcept
-	{
-		return instance_->logger();
 	}
 
 	///////////////////////////////////
@@ -253,7 +227,7 @@ namespace sat
 		PhysicalDeviceCriterion present_capable(VkSurfaceKHR surface) noexcept
 		{
 			return [=](const PhysicalDevice& device) -> std::optional<int> {
-				SwapChainDetails details = swap_chain::query(device, surface);
+				SwapchainDetails details = swap_chain::query(device, surface);
 
 				return !details.formats.empty() && !details.presentModes.empty()
 				           ? std::optional(0)

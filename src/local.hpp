@@ -4,21 +4,9 @@
 #include <algorithm>
 #include <span>
 #include <sstream>
-#include <stdexcept>
 #include <unordered_set>
 
 #include "logger.hpp"
-#include "util.hpp"
-
-#define VK_CALL(call, expection)                                          \
-	{                                                                     \
-		VkResult res = (call);                                            \
-		if (res != VK_SUCCESS)                                            \
-		{                                                                 \
-			logger().log(LogLevel::Error, "{}: {}", #call, name_of(res)); \
-			throw std::runtime_error(expection);                          \
-		}                                                                 \
-	}
 
 namespace sat
 {
@@ -81,16 +69,5 @@ namespace sat
 		}
 	}
 } // namespace sat
-
-#define S_TRACE(...) this->logger().log(LogLevel::Trace, __VA_ARGS__)
-
-#define S_INFO(...) this->logger().log(LogLevel::Info, __VA_ARGS__)
-
-#define S_WARN(...) this->logger().log(LogLevel::Warn, __VA_ARGS__)
-
-#define S_ERROR(...) this->logger().log(LogLevel::Error, __VA_ARGS__)
-
-#define S_PTR  "(0x{:x})"
-#define S_THIS (reinterpret_cast<size_t>(this))
 
 #endif

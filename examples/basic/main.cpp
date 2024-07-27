@@ -1,5 +1,10 @@
+#include <vulkan/vulkan_core.h>
+
 #include <iostream>
 #include <saturn/saturn.hpp>
+#include <utility>
+
+#include "saturn/sync.hpp"
 
 namespace crit = sat::criterion;
 namespace dev  = sat::device;
@@ -91,7 +96,7 @@ int main()
 	sat::rn<sat::Device> device = deviceBuilder.build();
 
 	VkQueue graphics = device->queue(graphicsQueueFamily);
-	VkQueue preset   = device->queue(presentQueueFamily);
+	VkQueue present  = device->queue(presentQueueFamily);
 
 	////////////////////
 	//// Swap Chain ////
@@ -100,8 +105,8 @@ int main()
 	int width, height;
 	glfwGetFramebufferSize(pWindow, &width, &height);
 
-	auto swapChainBuilder =
-	    sat::SwapChainBuilder(device, surface)
+	auto swapchainBuilder =
+	    sat::SwapchainBuilder(device, surface)
 	        .selectSurfaceFormat(VK_FORMAT_B8G8R8A8_SRGB,
 	                             VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
 	        .selectPresentMode(VK_PRESENT_MODE_MAILBOX_KHR)
@@ -109,10 +114,10 @@ int main()
 
 	if (graphicsQueueFamily != presentQueueFamily)
 	{
-		swapChainBuilder.share({{graphicsQueueFamily, presentQueueFamily}});
+		swapchainBuilder.share({{graphicsQueueFamily, presentQueueFamily}});
 	}
 
-	sat::rn<sat::SwapChain> swapChain = swapChainBuilder.build();
+	sat::rn<sat::Swapchain> swapchain = swapchainBuilder.build();
 
 	/////////////////////
 	//// Render Pass ////
@@ -120,7 +125,7 @@ int main()
 
 	sat::rn<sat::RenderPass> renderPass =
 	    sat::RenderPassBuilder(device)
-	        .createColorAttachment(swapChain->format())
+	        .createColorAttachment(swapchain->format())
 	        .begin()
 	        .addColorAttachment(0)
 	        .end()
@@ -131,13 +136,13 @@ int main()
 	//////////////////////
 
 	std::vector<sat::rn<sat::Framebuffer>> framebuffers;
-	framebuffers.reserve(swapChain->views().size());
+	framebuffers.reserve(swapchain->views().size());
 
-	for (VkImageView view : swapChain->views())
+	for (VkImageView view : swapchain->views())
 	{
 		sat::rn<sat::Framebuffer> framebuffer =
 		    sat::FramebufferBuilder(device, renderPass)
-		        .extent(swapChain->extent())
+		        .extent(swapchain->extent())
 		        .add(view)
 		        .build();
 
@@ -157,7 +162,7 @@ int main()
 	//////////////////
 
 	sat::rn<sat::Pipeline> pipeline =
-	    sat::PipelineBuilder(device, swapChain, renderPass)
+	    sat::PipelineBuilder(device, swapchain, renderPass)
 	        .addStage(VK_SHADER_STAGE_VERTEX_BIT, vert)
 	        .addStage(VK_SHADER_STAGE_FRAGMENT_BIT, frag)
 	        .addDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
@@ -173,7 +178,17 @@ int main()
 	                                     .reset()
 	                                     .build();
 
-	sat::CommandBuffer buffer = pool->allocate();
+	sat::CommandBuffer cmd = pool->allocate();
+
+	//////////////
+	//// Sync ////
+	//////////////
+
+	sat::rn<sat::Semaphore> imageAvailableSemaphore =
+	    sat::sync::semaphore(device);
+	sat::rn<sat::Semaphore> renderFinishedSemaphore =
+	    sat::sync::semaphore(device);
+	sat::rn<sat::Fence> inFlightFence = sat::sync::fence(device, true);
 
 	//////////////
 	//// Loop ////
@@ -182,12 +197,73 @@ int main()
 	while (!glfwWindowShouldClose(pWindow))
 	{
 		glfwPollEvents();
+
+		inFlightFence->wait();
+		inFlightFence->reset();
+
+		uint32_t imageIndex =
+		    swapchain->acquireNextImage(imageAvailableSemaphore);
+
+		////////////////
+		//// Record ////
+		////////////////
+
+		cmd.reset();
+		cmd.record();
+		cmd.begin(renderPass, framebuffers[imageIndex], swapchain->extent());
+
+		cmd.bind(pipeline);
+		cmd.viewport(swapchain->extent());
+		cmd.scissor(swapchain->extent());
+		cmd.draw(3);
+
+		cmd.end();
+		cmd.stop();
+
+		////////////////
+		//// Submit ////
+		////////////////
+
+		VkPipelineStageFlags waitStages[]{VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT};
+
+		VkSubmitInfo submitInfo{};
+		submitInfo.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.waitSemaphoreCount   = 1;
+		submitInfo.pWaitSemaphores      = imageAvailableSemaphore;
+		submitInfo.pWaitDstStageMask    = waitStages;
+		submitInfo.commandBufferCount   = 1;
+		submitInfo.pCommandBuffers      = cmd;
+		submitInfo.signalSemaphoreCount = 1;
+		submitInfo.pSignalSemaphores    = renderFinishedSemaphore;
+
+		SATURN_CALL(vkQueueSubmit(graphics, 1, &submitInfo, inFlightFence));
+
+		/////////////////
+		//// Present ////
+		/////////////////
+
+		VkPresentInfoKHR presentInfo{};
+		presentInfo.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+		presentInfo.waitSemaphoreCount = 1;
+		presentInfo.pWaitSemaphores    = renderFinishedSemaphore;
+		presentInfo.swapchainCount     = 1;
+		presentInfo.pSwapchains        = swapchain;
+		presentInfo.pImageIndices      = &imageIndex;
+
+		SATURN_CALL(vkQueuePresentKHR(present, &presentInfo));
 	}
 
 	/////////////////
 	//// Cleanup ////
 	/////////////////
 
+	device->waitIdle();
+
+	inFlightFence.reset();
+	renderFinishedSemaphore.reset();
+	imageAvailableSemaphore.reset();
+
+	pool->free(cmd);
 	pool.reset();
 
 	pipeline.reset();
@@ -200,7 +276,7 @@ int main()
 	}
 
 	renderPass.reset();
-	swapChain.reset();
+	swapchain.reset();
 	device.reset();
 	vkDestroySurfaceKHR(instance, surface, nullptr);
 	instance.reset();

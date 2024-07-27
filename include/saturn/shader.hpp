@@ -10,7 +10,6 @@
 #include <span>
 
 #include "core.hpp"
-#include "device.hpp"
 
 namespace sat
 {
@@ -32,8 +31,6 @@ namespace sat
 		sat::rn<Shader> fromBytes(std::span<uint8_t const> bytes) const;
 
 	private:
-		Logger& logger() const noexcept { return device_->instance().logger(); }
-
 		sat::rn<Device> device_;
 	};
 
@@ -41,15 +38,13 @@ namespace sat
 	//// Shader ////
 	////////////////
 
-	class SATURN_API Shader
+	class SATURN_API Shader : public Container<VkShaderModule>
 	{
 	public:
 		~Shader() noexcept;
 
 		Shader(const Shader&)            = delete;
 		Shader& operator=(const Shader&) = delete;
-
-		VkShaderModule handle() const noexcept { return handle_; }
 
 	private:
 		friend class ShaderLoader;
@@ -58,10 +53,7 @@ namespace sat
 		       const uint32_t* pBinary,
 		       size_t byteSize);
 
-		Logger& logger() const noexcept { return device_->instance().logger(); }
-
 		sat::rn<Device> device_;
-		VkShaderModule handle_;
 	};
 } // namespace sat
 

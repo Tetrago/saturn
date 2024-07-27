@@ -6,8 +6,6 @@
 #include <vector>
 
 #include "core.hpp"
-#include "device.hpp"
-#include "instance.hpp"
 
 namespace sat
 {
@@ -20,6 +18,7 @@ namespace sat
 	/////////////////////////////
 
 	class SATURN_API FramebufferBuilder
+	    : public Builder<FramebufferBuilder, Framebuffer>
 	{
 	public:
 		FramebufferBuilder(rn<Device> device,
@@ -27,8 +26,6 @@ namespace sat
 
 		FramebufferBuilder& extent(const VkExtent2D& extent) noexcept;
 		FramebufferBuilder& add(VkImageView view) noexcept;
-
-		rn<Framebuffer> build() const;
 
 	private:
 		friend class Framebuffer;
@@ -43,7 +40,7 @@ namespace sat
 	//// Framebuffer ////
 	/////////////////////
 
-	class SATURN_API Framebuffer
+	class SATURN_API Framebuffer : public Container<VkFramebuffer>
 	{
 	public:
 		~Framebuffer() noexcept;
@@ -52,15 +49,12 @@ namespace sat
 		Framebuffer& operator=(const Framebuffer&) = delete;
 
 	private:
-		friend class FramebufferBuilder;
+		friend class Builder<FramebufferBuilder, Framebuffer>;
 
 		explicit Framebuffer(const FramebufferBuilder& builder);
 
-		Logger& logger() const noexcept { return device_->instance().logger(); }
-
 		rn<Device> device_;
 		rn<RenderPass> renderPass_;
-		VkFramebuffer handle_;
 	};
 } // namespace sat
 

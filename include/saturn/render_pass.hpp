@@ -7,11 +7,10 @@
 #include <vector>
 
 #include "core.hpp"
-#include "device.hpp"
-#include "instance.hpp"
 
 namespace sat
 {
+	class Device;
 	class RenderPass;
 
 	/////////////////////////////
@@ -19,6 +18,7 @@ namespace sat
 	/////////////////////////////
 
 	class SATURN_API RenderPassBuilder
+	    : public Builder<RenderPassBuilder, RenderPass>
 	{
 	public:
 		explicit RenderPassBuilder(rn<Device> device) noexcept;
@@ -33,8 +33,6 @@ namespace sat
 		    uint32_t index,
 		    VkImageLayout layout =
 		        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) noexcept;
-
-		rn<RenderPass> build() const;
 
 	private:
 		friend class RenderPass;
@@ -63,7 +61,7 @@ namespace sat
 	//// Render Pass ////
 	/////////////////////
 
-	class SATURN_API RenderPass
+	class SATURN_API RenderPass : public Container<VkRenderPass>
 	{
 	public:
 		~RenderPass() noexcept;
@@ -71,17 +69,12 @@ namespace sat
 		RenderPass(const RenderPass&)            = delete;
 		RenderPass& operator=(const RenderPass&) = delete;
 
-		VkRenderPass handle() const noexcept { return handle_; }
-
 	private:
-		friend class RenderPassBuilder;
+		friend class Builder<RenderPassBuilder, RenderPass>;
 
 		explicit RenderPass(const RenderPassBuilder& builder);
 
-		Logger& logger() const noexcept { return device_->instance().logger(); }
-
 		rn<Device> device_;
-		VkRenderPass handle_;
 	};
 } // namespace sat
 

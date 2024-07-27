@@ -2,7 +2,6 @@
 #define SATURN_PHYSICAL_DEVICE_HPP
 
 #include <vulkan/vulkan.h>
-#include <vulkan/vulkan_core.h>
 
 #include <functional>
 #include <optional>
@@ -56,7 +55,7 @@ namespace sat
 	class SATURN_API PhysicalDeviceSelector
 	{
 	public:
-		PhysicalDeviceSelector(rn<Instance> instance) noexcept;
+		PhysicalDeviceSelector(rn<Instance> instance);
 
 		PhysicalDeviceSelector& require(
 		    const PhysicalDeviceCriterion& criterion) noexcept;
@@ -67,8 +66,6 @@ namespace sat
 		std::optional<PhysicalDevice> select() const noexcept;
 
 	private:
-		Logger& logger() const noexcept;
-
 		rn<Instance> instance_;
 		std::vector<std::pair<PhysicalDevice, int>> devices_;
 	};

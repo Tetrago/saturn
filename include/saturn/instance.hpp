@@ -4,11 +4,13 @@
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
+#include <functional>
 #include <string>
+#include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include "core.hpp"
-#include "logger.hpp"
 #include "physical_device.hpp"
 
 #ifdef SATURN_INCLUDE_GLFW
@@ -20,11 +22,16 @@ namespace sat
 {
 	class Instance;
 
+	using DebugCallback =
+	    std::function<void(VkDebugUtilsMessageSeverityFlagBitsEXT,
+	                       VkDebugUtilsMessageTypeFlagsEXT,
+	                       std::string_view)>;
+
 	//////////////////////////
 	//// Instance Builder ////
 	//////////////////////////
 
-	class SATURN_API InstanceBuilder
+	class SATURN_API InstanceBuilder : public Builder<InstanceBuilder, Instance>
 	{
 	public:
 		InstanceBuilder() noexcept;
@@ -39,8 +46,7 @@ namespace sat
 		                               int patch) noexcept;
 		InstanceBuilder& addExtension(const char* pExtensionName) noexcept;
 		InstanceBuilder& addLayer(const char* pLayerName) noexcept;
-		InstanceBuilder& logger(rn<Logger> logger,
-		                        rn<Logger> vulkan = make_rn<Logger>()) noexcept;
+		InstanceBuilder& debugCallback(DebugCallback callback) noexcept;
 
 #ifdef SATURN_INCLUDE_GLFW
 		/**
@@ -49,8 +55,6 @@ namespace sat
 		 */
 		InstanceBuilder& addGlfwExtensions() noexcept;
 #endif
-
-		rn<Instance> build() const;
 
 	private:
 		friend class Instance;
@@ -61,15 +65,14 @@ namespace sat
 		uint32_t engineVersion_ = VK_MAKE_VERSION(0, 1, 0);
 		std::vector<const char*> extensions_;
 		std::vector<const char*> layers_;
-		rn<Logger> logger_;
-		rn<Logger> vulkanLogger_;
+		std::optional<DebugCallback> callback_;
 	};
 
 	//////////////////
 	//// Instance ////
 	//////////////////
 
-	class SATURN_API Instance
+	class SATURN_API Instance : public Container<VkInstance>
 	{
 	public:
 		~Instance() noexcept;
@@ -79,20 +82,13 @@ namespace sat
 
 		std::vector<PhysicalDevice> devices() const noexcept;
 
-		VkInstance handle() const noexcept { return handle_; }
-
-		Logger& logger() const noexcept { return *logger_; }
-
 	private:
-		friend class InstanceBuilder;
+		friend class Builder<InstanceBuilder, Instance>;
 
 		explicit Instance(const InstanceBuilder& builder);
 
-		VkInstance handle_;
-		rn<Logger> logger_;
-
 #if SATURN_ENABLE_VALIDATION
-		rn<Logger> vulkanLogger_;
+		std::optional<DebugCallback> callback_;
 		VkDebugUtilsMessengerEXT messenger_ = VK_NULL_HANDLE;
 #endif
 	};

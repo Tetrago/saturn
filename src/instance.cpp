@@ -1,8 +1,9 @@
 #include "instance.hpp"
 
+#include <cstring>
 #include <sstream>
 
-#include "local.hpp"
+#include "error.hpp"
 #include "physical_device.hpp"
 
 namespace sat
@@ -12,7 +13,6 @@ namespace sat
 	//////////////////////////
 
 	InstanceBuilder::InstanceBuilder() noexcept
-	    : logger_(make_rn<Logger>()), vulkanLogger_(make_rn<Logger>())
 	{
 #if SATURN_ENABLE_VALIDATION
 		extensions_.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -63,18 +63,11 @@ namespace sat
 		return *this;
 	}
 
-	InstanceBuilder& InstanceBuilder::logger(rn<Logger> logger,
-	                                         rn<Logger> vulkan) noexcept
+	InstanceBuilder& InstanceBuilder::debugCallback(
+	    DebugCallback callback) noexcept
 	{
-		logger_       = std::move(logger);
-		vulkanLogger_ = std::move(vulkan);
-
+		callback_ = std::move(callback);
 		return *this;
-	}
-
-	rn<Instance> InstanceBuilder::build() const
-	{
-		return rn<Instance>(new Instance(*this));
 	}
 
 	//////////////////
@@ -83,8 +76,8 @@ namespace sat
 
 	namespace
 	{
-		bool evaluate_instance_extensions(
-		    Logger& logger, const std::vector<const char*>& required) noexcept
+		void evaluate_instance_extensions(
+		    const std::vector<const char*>& required)
 		{
 			uint32_t count;
 			vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
@@ -92,28 +85,41 @@ namespace sat
 			vkEnumerateInstanceExtensionProperties(
 			    nullptr, &count, extensions.data());
 
-			return evaluate_required_items<VkExtensionProperties>(
-			    logger,
-			    required,
-			    extensions,
-			    &VkExtensionProperties::extensionName,
-			    "instance extensions");
+			for (const char* pExtensionName : required)
+			{
+				for (const VkExtensionProperties& props : extensions)
+				{
+					if (strcmp(props.extensionName, pExtensionName) == 0)
+					{
+						goto next;
+					}
+				}
+
+				SATURN_THROW(MissingFeatureException, pExtensionName);
+			next:;
+			}
 		}
 
-		bool evaluate_instance_layers(
-		    Logger& logger, const std::vector<const char*>& required) noexcept
+		void evaluate_instance_layers(const std::vector<const char*>& required)
 		{
 			uint32_t count;
 			vkEnumerateInstanceLayerProperties(&count, nullptr);
 			std::vector<VkLayerProperties> layers(count);
 			vkEnumerateInstanceLayerProperties(&count, layers.data());
 
-			return evaluate_required_items<VkLayerProperties>(
-			    logger,
-			    required,
-			    layers,
-			    &VkLayerProperties::layerName,
-			    "instance layers");
+			for (const char* pLayerName : required)
+			{
+				for (const VkLayerProperties& props : layers)
+				{
+					if (strcmp(props.layerName, pLayerName) == 0)
+					{
+						goto next;
+					}
+				}
+
+				SATURN_THROW(MissingFeatureException, pLayerName);
+			next:;
+			}
 		}
 
 		VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
@@ -122,62 +128,18 @@ namespace sat
 		    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 		    void* pUserData)
 		{
-			LogLevel level = [&]() {
-				switch (messageSeverity)
-				{
-				case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-					return LogLevel::Trace;
-				case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-					return LogLevel::Info;
-				case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-					return LogLevel::Warn;
-				default:
-				case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-					return LogLevel::Error;
-				}
-			}();
-
-			reinterpret_cast<Logger*>(pUserData)->log(
-			    level, "(Vulkan) {}", pCallbackData->pMessage);
+			reinterpret_cast<std::optional<DebugCallback>*>(pUserData)->value()(
+			    messageSeverity, messageType, pCallbackData->pMessage);
 
 			return VK_FALSE;
 		}
 	} // namespace
 
 	Instance::Instance(const InstanceBuilder& builder)
-	    : logger_(builder.logger_)
+	    : callback_(builder.callback_)
 	{
-		if (!evaluate_instance_extensions(logger(), builder.extensions_) ||
-		    !evaluate_instance_layers(logger(), builder.layers_))
-		{
-			throw std::runtime_error("Missing required features");
-		}
-		else
-		{
-			// Dump instance extensions
-
-			std::ostringstream oss;
-			oss << "Loading instance extenions:";
-
-			for (const char* pExtensionName : builder.extensions_)
-			{
-				oss << "\n - " << pExtensionName;
-			}
-
-			S_INFO(oss.str());
-
-			// Dump instance layers
-
-			oss.str("");
-			oss << "Loading instance layers:";
-
-			for (const char* pLayerName : builder.layers_)
-			{
-				oss << "\n - " << pLayerName;
-			}
-
-			S_INFO(oss.str());
-		}
+		evaluate_instance_extensions(builder.extensions_);
+		evaluate_instance_layers(builder.layers_);
 
 		VkApplicationInfo appInfo{};
 		appInfo.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -196,42 +158,38 @@ namespace sat
 		createInfo.ppEnabledLayerNames     = builder.layers_.data();
 
 #if SATURN_ENABLE_VALIDATION
-		vulkanLogger_ = builder.vulkanLogger_;
-
 		VkDebugUtilsMessengerCreateInfoEXT messengerInfo{};
-		messengerInfo.sType =
-		    VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-		messengerInfo.messageSeverity =
-		    VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-		    VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-		    VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-		    VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-		messengerInfo.messageType =
-		    VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-		    VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-		    VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-		messengerInfo.pfnUserCallback = debug_callback;
-		messengerInfo.pUserData       = vulkanLogger_.get();
 
-		createInfo.pNext = &messengerInfo;
+		if (callback_.has_value())
+		{
+			messengerInfo.sType =
+			    VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+			messengerInfo.messageSeverity =
+			    VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+			    VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+			    VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+			    VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+			messengerInfo.messageType =
+			    VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+			    VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+			    VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+			messengerInfo.pfnUserCallback = debug_callback;
+			messengerInfo.pUserData       = &callback_;
+
+			createInfo.pNext = &messengerInfo;
+		}
 #endif
 
-		VK_CALL(vkCreateInstance(&createInfo, nullptr, &handle_),
-		        "Failed to create VkInstance");
-
-		S_TRACE("Created instance " S_PTR " `{}`", S_THIS, builder.appName_);
+		SATURN_CALL(vkCreateInstance(&createInfo, nullptr, &handle_));
 
 #if SATURN_ENABLE_VALIDATION
-		auto fn = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
-		    vkGetInstanceProcAddr(handle_, "vkCreateDebugUtilsMessengerEXT"));
-		if (fn == nullptr ||
-		    fn(handle_, &messengerInfo, nullptr, &messenger_) != VK_SUCCESS)
+		if (callback_.has_value())
 		{
-			S_WARN("Unable to create debug messenger");
-		}
-		else
-		{
-			S_TRACE("Created debug messenger");
+			auto vkCreateDebugUtilsMessengerEXT =
+			    SATURN_GET(handle_, vkCreateDebugUtilsMessengerEXT);
+
+			SATURN_CALL(vkCreateDebugUtilsMessengerEXT(
+			    handle_, &messengerInfo, nullptr, &messenger_));
 		}
 #endif
 	}
@@ -241,35 +199,20 @@ namespace sat
 #if SATURN_ENABLE_VALIDATION
 		if (messenger_ != VK_NULL_HANDLE)
 		{
-			auto fn = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
-			    vkGetInstanceProcAddr(handle_,
-			                          "vkDestroyDebugUtilsMessengerEXT"));
+			auto vkDestroyDebugUtilsMessengerEXT =
+			    SATURN_GET(handle_, vkDestroyDebugUtilsMessengerEXT);
 
-			if (fn != nullptr)
-			{
-				fn(handle_, messenger_, nullptr);
-
-				S_TRACE("Destroyed debug messenger");
-			}
-			else
-			{
-				S_ERROR("Unable to destroy debug messenger");
-			}
+			vkDestroyDebugUtilsMessengerEXT(handle_, messenger_, nullptr);
 		}
 #endif
 
 		vkDestroyInstance(handle_, nullptr);
-
-		S_TRACE("Destroyed instance " S_PTR, S_THIS);
 	}
 
 	std::vector<PhysicalDevice> Instance::devices() const noexcept
 	{
 		uint32_t count;
 		vkEnumeratePhysicalDevices(handle_, &count, nullptr);
-
-		S_TRACE("Found {} physical devices", count);
-
 		std::vector<VkPhysicalDevice> handles(count);
 		vkEnumeratePhysicalDevices(handle_, &count, handles.data());
 

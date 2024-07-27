@@ -1,4 +1,6 @@
-#include "util.hpp"
+#include "error.hpp"
+
+#include <format>
 
 namespace sat
 {
@@ -58,5 +60,19 @@ namespace sat
 #undef CASE
 		default: return "Unkown VkResult";
 		}
+	}
+
+	const char* UnsuccessfulResultException::what() const noexcept
+	{
+		what_ = std::format(
+		    "({}:{}) {} -> {}", file_, line_, call_, name_of(result_));
+		return what_.c_str();
+	}
+
+	const char* MissingFeatureException::what() const noexcept
+	{
+		what_ =
+		    std::format("({}:{}) Missing feature: {}", file_, line_, feature_);
+		return what_.c_str();
 	}
 } // namespace sat

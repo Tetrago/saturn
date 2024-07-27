@@ -7,17 +7,19 @@
 #include <vector>
 
 #include "core.hpp"
-#include "device.hpp"
+#include "saturn/sync.hpp"
 
 namespace sat
 {
+	class Device;
+	struct PhysicalDevice;
+	class Semaphore;
+
 	////////////////////////////
 	//// Swap Chain Details ////
 	////////////////////////////
 
-	struct PhysicalDevice;
-
-	struct SwapChainDetails
+	struct SwapchainDetails
 	{
 		VkSurfaceCapabilitiesKHR capabilities;
 		std::vector<VkSurfaceFormatKHR> formats;
@@ -26,7 +28,7 @@ namespace sat
 
 	namespace swap_chain
 	{
-		SATURN_API SwapChainDetails query(const PhysicalDevice& device,
+		SATURN_API SwapchainDetails query(const PhysicalDevice& device,
 		                                  VkSurfaceKHR surface) noexcept;
 	}
 
@@ -35,42 +37,41 @@ namespace sat
 	////////////////////////////
 
 	class Device;
-	class SwapChain;
+	class Swapchain;
 
-	class SATURN_API SwapChainBuilder
+	class SATURN_API SwapchainBuilder
+	    : public Builder<SwapchainBuilder, Swapchain>
 	{
 	public:
-		SwapChainBuilder(rn<Device> device, VkSurfaceKHR surface) noexcept;
+		SwapchainBuilder(rn<Device> device, VkSurfaceKHR surface) noexcept;
 
-		SwapChainBuilder& selectSurfaceFormat(
+		SwapchainBuilder& selectSurfaceFormat(
 		    VkFormat format, VkColorSpaceKHR colorSpace) noexcept;
 
-		SwapChainBuilder& selectPresentMode(
+		SwapchainBuilder& selectPresentMode(
 		    VkPresentModeKHR presentMode) noexcept;
 
 		/**
 		 * \brief Sets the swap chain's extent in pixels when necessary.
 		 */
-		SwapChainBuilder& extent(int width, int height) noexcept;
+		SwapchainBuilder& extent(int width, int height) noexcept;
 
-		SwapChainBuilder& imageCount(uint32_t count) noexcept;
+		SwapchainBuilder& imageCount(uint32_t count) noexcept;
 
 		/**
 		 * \brief Shares swap chain between queue families
 		 */
-		SwapChainBuilder& usage(VkImageUsageFlags usage) noexcept;
+		SwapchainBuilder& usage(VkImageUsageFlags usage) noexcept;
 
-		SwapChainBuilder& share(
+		SwapchainBuilder& share(
 		    std::span<uint32_t const> queueFamilies) noexcept;
 
-		rn<SwapChain> build() const;
-
 	private:
-		friend class SwapChain;
+		friend class Swapchain;
 
 		rn<Device> device_;
 		VkSurfaceKHR surface_;
-		SwapChainDetails details_;
+		SwapchainDetails details_;
 		VkSurfaceFormatKHR surfaceFormat_;
 		VkPresentModeKHR presentMode_;
 		VkExtent2D extent_{};
@@ -83,17 +84,15 @@ namespace sat
 	//// Swap Chain ////
 	////////////////////
 
-	class Logger;
-
-	class SATURN_API SwapChain
+	class SATURN_API Swapchain : public Container<VkSwapchainKHR>
 	{
 	public:
-		~SwapChain() noexcept;
+		~Swapchain() noexcept;
 
-		SwapChain(const SwapChain&)            = delete;
-		SwapChain& operator=(const SwapChain&) = delete;
+		Swapchain(const Swapchain&)            = delete;
+		Swapchain& operator=(const Swapchain&) = delete;
 
-		VkSwapchainKHR handle() const noexcept { return handle_; }
+		uint32_t acquireNextImage(const rn<Semaphore>& semaphore);
 
 		const std::vector<VkImageView>& views() const noexcept
 		{
@@ -105,14 +104,11 @@ namespace sat
 		const VkExtent2D& extent() const noexcept { return extent_; }
 
 	private:
-		friend class SwapChainBuilder;
+		friend class Builder<SwapchainBuilder, Swapchain>;
 
-		explicit SwapChain(const SwapChainBuilder& builder);
-
-		Logger& logger() const noexcept { return device_->instance().logger(); }
+		explicit Swapchain(const SwapchainBuilder& builder);
 
 		sat::rn<Device> device_;
-		VkSwapchainKHR handle_;
 		std::vector<VkImage> images_;
 		VkFormat format_;
 		VkExtent2D extent_;

@@ -4,14 +4,14 @@
 #include "command.hpp"
 #include "core.hpp"
 #include "device.hpp"
+#include "error.hpp"
 #include "framebuffer.hpp"
 #include "instance.hpp"
-#include "logger.hpp"
 #include "physical_device.hpp"
 #include "pipeline.hpp"
 #include "render_pass.hpp"
 #include "shader.hpp"
-#include "swap_chain.hpp"
-#include "util.hpp"
+#include "swapchain.hpp"
+#include "sync.hpp"
 
 #endif

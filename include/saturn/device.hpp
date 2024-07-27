@@ -7,18 +7,18 @@
 #include <vector>
 
 #include "core.hpp"
-#include "instance.hpp"
 #include "physical_device.hpp"
 
 namespace sat
 {
 	class Device;
+	class Fence;
 
 	////////////////////////
 	//// Device Builder ////
 	////////////////////////
 
-	class SATURN_API DeviceBuilder
+	class SATURN_API DeviceBuilder : public Builder<DeviceBuilder, Device>
 	{
 	public:
 		DeviceBuilder(rn<Instance> instance, PhysicalDevice device) noexcept;
@@ -30,8 +30,6 @@ namespace sat
 		DeviceBuilder& addQueue(uint32_t index, float priority = 1) noexcept;
 
 		DeviceBuilder& addExtension(const char* pExtensionName) noexcept;
-
-		rn<Device> build() const;
 
 	private:
 		friend class Device;
@@ -46,9 +44,7 @@ namespace sat
 	//// Device ////
 	////////////////
 
-	class Logger;
-
-	class SATURN_API Device
+	class SATURN_API Device : public Container<VkDevice>
 	{
 	public:
 		~Device() noexcept;
@@ -58,20 +54,15 @@ namespace sat
 
 		VkQueue queue(uint32_t family, uint32_t index = 0) const noexcept;
 
-		VkDevice handle() const noexcept { return handle_; }
-
-		Instance& instance() const noexcept { return *instance_; }
+		void waitIdle() const;
 
 		const PhysicalDevice& device() const noexcept { return device_; }
 
 	private:
-		friend class DeviceBuilder;
+		friend class Builder<DeviceBuilder, Device>;
 
 		explicit Device(const DeviceBuilder& builder);
 
-		Logger& logger() const noexcept { return instance_->logger(); }
-
-		VkDevice handle_;
 		rn<Instance> instance_;
 		PhysicalDevice device_;
 	};

@@ -1,8 +1,9 @@
 #include "device.hpp"
 
-#include <sstream>
+#include <cstring>
 
-#include "local.hpp"
+#include "error.hpp"
+#include "instance.hpp"
 
 namespace sat
 {
@@ -29,11 +30,6 @@ namespace sat
 		return *this;
 	}
 
-	rn<Device> DeviceBuilder::build() const
-	{
-		return rn<Device>(new Device(*this));
-	}
-
 	////////////////
 	//// Device ////
 	////////////////
@@ -41,28 +37,18 @@ namespace sat
 	Device::Device(const DeviceBuilder& builder)
 	    : instance_(builder.instance_), device_(builder.device_)
 	{
-		if (!evaluate_required_items<VkExtensionProperties>(
-		        instance_->logger(),
-		        builder.extensions_,
-		        device_.extensions,
-		        &VkExtensionProperties::extensionName,
-		        "device extensions"))
+		for (const char* pExtensionName : builder.extensions_)
 		{
-			throw std::runtime_error("Missing required device extensions");
-		}
-		else
-		{
-			// Dump device extensions
-
-			std::ostringstream oss;
-			oss << "Loading device extensions:";
-
-			for (const char* pExtensionName : builder.extensions_)
+			for (const VkExtensionProperties& props : device_.extensions)
 			{
-				oss << "\n - " << pExtensionName;
+				if (strcmp(props.extensionName, pExtensionName) == 0)
+				{
+					goto next;
+				}
 			}
 
-			S_INFO(oss.str());
+			SATURN_THROW(MissingFeatureException, pExtensionName);
+		next:;
 		}
 
 		std::vector<VkDeviceQueueCreateInfo> queueInfos;
@@ -86,19 +72,13 @@ namespace sat
 		createInfo.enabledExtensionCount = builder.extensions_.size();
 		createInfo.ppEnabledExtensionNames = builder.extensions_.data();
 
-		VK_CALL(vkCreateDevice(device_.handle, &createInfo, nullptr, &handle_),
-		        "Failed to create device");
-
-		S_TRACE("Created device " S_PTR " with {} queues",
-		        S_THIS,
-		        builder.queues_.size());
+		SATURN_CALL(
+		    vkCreateDevice(device_.handle, &createInfo, nullptr, &handle_));
 	}
 
 	Device::~Device() noexcept
 	{
 		vkDestroyDevice(handle_, nullptr);
-
-		S_TRACE("Destroyed device " S_PTR, S_THIS);
 	}
 
 	VkQueue Device::queue(uint32_t family, uint32_t index) const noexcept
@@ -106,8 +86,11 @@ namespace sat
 		VkQueue handle;
 		vkGetDeviceQueue(handle_, family, index, &handle);
 
-		S_TRACE("Retrieving queue family {} index {}", family, index);
-
 		return handle;
+	}
+
+	void Device::waitIdle() const
+	{
+		SATURN_CALL(vkDeviceWaitIdle(handle_));
 	}
 } // namespace sat

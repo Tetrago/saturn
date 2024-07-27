@@ -2,10 +2,11 @@
 
 #include <vulkan/vulkan_core.h>
 
-#include "local.hpp"
+#include "device.hpp"
+#include "error.hpp"
 #include "render_pass.hpp"
 #include "shader.hpp"
-#include "swap_chain.hpp"
+#include "swapchain.hpp"
 
 namespace sat
 {
@@ -14,10 +15,10 @@ namespace sat
 	//////////////////////////
 
 	PipelineBuilder::PipelineBuilder(rn<Device> device,
-	                                 rn<SwapChain> swapChain,
+	                                 rn<Swapchain> swapchain,
 	                                 rn<RenderPass> renderPass) noexcept
 	    : device_(std::move(device)),
-	      swapChain_(std::move(swapChain)),
+	      swapchain_(std::move(swapchain)),
 	      renderPass_(renderPass)
 	{}
 
@@ -28,7 +29,7 @@ namespace sat
 		VkPipelineShaderStageCreateInfo createInfo{};
 		createInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 		createInfo.stage  = stage;
-		createInfo.module = shader->handle();
+		createInfo.module = shader;
 		createInfo.pName  = pEntrypoint;
 
 		stages_.push_back(createInfo);
@@ -71,18 +72,13 @@ namespace sat
 		return *this;
 	}
 
-	rn<Pipeline> PipelineBuilder::build() const
-	{
-		return rn<Pipeline>(new Pipeline(*this));
-	}
-
 	//////////////////
 	//// Pipeline ////
 	//////////////////
 
 	Pipeline::Pipeline(const PipelineBuilder& builder)
 	    : device_(builder.device_),
-	      swapChain_(builder.swapChain_),
+	      swapchain_(builder.swapchain_),
 	      renderPass_(builder.renderPass_)
 	{
 		VkPipelineVertexInputStateCreateInfo vertexInputState{};
@@ -102,12 +98,12 @@ namespace sat
 		dynamicState.pDynamicStates    = builder.dynamics_.data();
 
 		VkViewport viewport{};
-		viewport.width    = swapChain_->extent().width;
-		viewport.height   = swapChain_->extent().height;
+		viewport.width    = swapchain_->extent().width;
+		viewport.height   = swapchain_->extent().height;
 		viewport.maxDepth = 1;
 
 		VkRect2D scissor{};
-		scissor.extent = swapChain_->extent();
+		scissor.extent = swapchain_->extent();
 
 		VkPipelineViewportStateCreateInfo viewportState{};
 		viewportState.sType =
@@ -154,9 +150,8 @@ namespace sat
 		VkPipelineLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
-		VK_CALL(vkCreatePipelineLayout(
-		            device_->handle(), &layoutInfo, nullptr, &layout_),
-		        "Failed to create pipeline layout");
+		SATURN_CALL(
+		    vkCreatePipelineLayout(device_, &layoutInfo, nullptr, &layout_));
 
 		//////////////////
 		//// Pipeline ////
@@ -174,24 +169,16 @@ namespace sat
 		createInfo.pColorBlendState    = &colorBlendState;
 		createInfo.pDynamicState       = &dynamicState;
 		createInfo.layout              = layout_;
-		createInfo.renderPass          = renderPass_->handle();
+		createInfo.renderPass          = renderPass_;
 		createInfo.subpass             = builder.subpass_;
 
-		VK_CALL(vkCreateGraphicsPipelines(device_->handle(),
-		                                  VK_NULL_HANDLE,
-		                                  1,
-		                                  &createInfo,
-		                                  nullptr,
-		                                  &handle_),
-		        "Failed to create graphics pipeline");
-
-		S_TRACE("Created graphics pipeline " S_PTR, S_THIS);
+		SATURN_CALL(vkCreateGraphicsPipelines(
+		    device_, VK_NULL_HANDLE, 1, &createInfo, nullptr, &handle_));
 	}
 
 	Pipeline::~Pipeline() noexcept
 	{
-		vkDestroyPipelineLayout(device_->handle(), layout_, nullptr);
-
-		S_TRACE("Destroyed graphics pipeline " S_PTR, S_THIS);
+		vkDestroyPipeline(device_, handle_, nullptr);
+		vkDestroyPipelineLayout(device_, layout_, nullptr);
 	}
 } // namespace sat

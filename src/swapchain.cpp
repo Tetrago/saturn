@@ -1,9 +1,10 @@
-#include "swap_chain.hpp"
+#include "swapchain.hpp"
 
 #include <algorithm>
 #include <limits>
 
-#include "local.hpp"
+#include "device.hpp"
+#include "error.hpp"
 #include "physical_device.hpp"
 
 namespace sat
@@ -12,10 +13,10 @@ namespace sat
 	//// Swap Chain Details ////
 	////////////////////////////
 
-	SwapChainDetails swap_chain::query(const PhysicalDevice& device,
+	SwapchainDetails swap_chain::query(const PhysicalDevice& device,
 	                                   VkSurfaceKHR surface) noexcept
 	{
-		SwapChainDetails details{};
+		SwapchainDetails details{};
 
 		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
 		    device.handle, surface, &details.capabilities);
@@ -50,7 +51,7 @@ namespace sat
 	//// Swap Chain Builder ////
 	////////////////////////////
 
-	SwapChainBuilder::SwapChainBuilder(rn<Device> device,
+	SwapchainBuilder::SwapchainBuilder(rn<Device> device,
 	                                   VkSurfaceKHR surface) noexcept
 	    : device_(std::move(device)), surface_(surface)
 	{
@@ -68,7 +69,7 @@ namespace sat
 		}
 	}
 
-	SwapChainBuilder& SwapChainBuilder::selectSurfaceFormat(
+	SwapchainBuilder& SwapchainBuilder::selectSurfaceFormat(
 	    VkFormat format, VkColorSpaceKHR colorSpace) noexcept
 	{
 		for (const VkSurfaceFormatKHR& surfaceFormat : details_.formats)
@@ -84,7 +85,7 @@ namespace sat
 		return *this;
 	}
 
-	SwapChainBuilder& SwapChainBuilder::selectPresentMode(
+	SwapchainBuilder& SwapchainBuilder::selectPresentMode(
 	    VkPresentModeKHR presentMode) noexcept
 	{
 		if (std::find(details_.presentModes.begin(),
@@ -97,7 +98,7 @@ namespace sat
 		return *this;
 	}
 
-	SwapChainBuilder& SwapChainBuilder::extent(int width, int height) noexcept
+	SwapchainBuilder& SwapchainBuilder::extent(int width, int height) noexcept
 	{
 		const VkSurfaceCapabilitiesKHR& caps = details_.capabilities;
 
@@ -116,7 +117,7 @@ namespace sat
 		return *this;
 	}
 
-	SwapChainBuilder& SwapChainBuilder::imageCount(uint32_t count) noexcept
+	SwapchainBuilder& SwapchainBuilder::imageCount(uint32_t count) noexcept
 	{
 		imageCount_ = count;
 
@@ -130,29 +131,24 @@ namespace sat
 		return *this;
 	}
 
-	SwapChainBuilder& SwapChainBuilder::usage(VkImageUsageFlags usage) noexcept
+	SwapchainBuilder& SwapchainBuilder::usage(VkImageUsageFlags usage) noexcept
 	{
 		usage_ = usage;
 		return *this;
 	}
 
-	SwapChainBuilder& SwapChainBuilder::share(
+	SwapchainBuilder& SwapchainBuilder::share(
 	    std::span<uint32_t const> queueFamilies) noexcept
 	{
 		queueFamilies_.assign(queueFamilies.begin(), queueFamilies.end());
 		return *this;
 	}
 
-	rn<SwapChain> SwapChainBuilder::build() const
-	{
-		return rn<SwapChain>(new SwapChain(*this));
-	}
-
 	////////////////////
 	//// Swap Chain ////
 	////////////////////
 
-	SwapChain::SwapChain(const SwapChainBuilder& builder)
+	Swapchain::Swapchain(const SwapchainBuilder& builder)
 	    : device_(builder.device_),
 	      format_(builder.surfaceFormat_.format),
 	      extent_(builder.extent_)
@@ -171,7 +167,6 @@ namespace sat
 		createInfo.imageArrayLayers = 1;
 		createInfo.imageUsage       = builder.usage_;
 
-		// Handle queue family sharing
 		if (builder.queueFamilies_.empty())
 		{
 			createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -190,25 +185,17 @@ namespace sat
 		createInfo.clipped        = VK_TRUE;
 		createInfo.oldSwapchain   = VK_NULL_HANDLE;
 
-		VK_CALL(vkCreateSwapchainKHR(
-		            device_->handle(), &createInfo, nullptr, &handle_),
-		        "Failed to create swap chain");
+		SATURN_CALL(
+		    vkCreateSwapchainKHR(device_, &createInfo, nullptr, &handle_));
 
 		////////////////
 		//// Images ////
 		////////////////
 
 		uint32_t count;
-		vkGetSwapchainImagesKHR(device_->handle(), handle_, &count, nullptr);
+		vkGetSwapchainImagesKHR(device_, handle_, &count, nullptr);
 		images_.resize(count);
-		vkGetSwapchainImagesKHR(
-		    device_->handle(), handle_, &count, images_.data());
-
-		S_TRACE("Created {}x{} swap chain " S_PTR " with {} images",
-		        builder.extent_.width,
-		        builder.extent_.height,
-		        S_THIS,
-		        count);
+		vkGetSwapchainImagesKHR(device_, handle_, &count, images_.data());
 
 		/////////////////////
 		//// Image Views ////
@@ -234,14 +221,11 @@ namespace sat
 			viewInfo.image = images_[count];
 
 			if (vkCreateImageView(
-			        device_->handle(), &viewInfo, nullptr, &views_[count]) !=
-			    VK_SUCCESS)
+			        device_, &viewInfo, nullptr, &views_[count]) != VK_SUCCESS)
 			{
 				goto abort;
 			}
 		}
-
-		S_TRACE("Created {} swap chain image views", views_.size());
 
 		return;
 
@@ -250,38 +234,35 @@ namespace sat
 		///////////////
 
 	abort:
-
-		S_ERROR(
-		    "Aborting during swap chain initialization due to failure to "
-		    "create image views");
-
 		while (++count < views_.size())
 		{
-			vkDestroyImageView(device_->handle(), views_[count], nullptr);
+			vkDestroyImageView(device_, views_[count], nullptr);
 		}
 
-		S_TRACE("Destroyed swap chain image views while aborting");
-
-		vkDestroySwapchainKHR(device_->handle(), handle_, nullptr);
-
-		S_TRACE("Destroyed swap chain " S_PTR
-		        " while aborting failed image view creation",
-		        S_THIS);
+		vkDestroySwapchainKHR(device_, handle_, nullptr);
 
 		throw std::runtime_error("Failed to create swap chain image views");
 	}
 
-	SwapChain::~SwapChain() noexcept
+	Swapchain::~Swapchain() noexcept
 	{
 		for (VkImageView view : views_)
 		{
-			vkDestroyImageView(device_->handle(), view, nullptr);
+			vkDestroyImageView(device_, view, nullptr);
 		}
 
-		S_TRACE("Destroyed {} swap chain image views", views_.size());
+		vkDestroySwapchainKHR(device_, handle_, nullptr);
+	}
 
-		vkDestroySwapchainKHR(device_->handle(), handle_, nullptr);
-
-		S_TRACE("Destroyed swap chain " S_PTR, S_THIS);
+	uint32_t Swapchain::acquireNextImage(const rn<Semaphore>& semaphore)
+	{
+		uint32_t index;
+		SATURN_CALL(vkAcquireNextImageKHR(device_,
+		                                  handle_,
+		                                  std::numeric_limits<uint64_t>::max(),
+		                                  semaphore,
+		                                  VK_NULL_HANDLE,
+		                                  &index));
+		return index;
 	}
 } // namespace sat

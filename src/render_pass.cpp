@@ -1,8 +1,7 @@
 #include "render_pass.hpp"
 
-#include <vulkan/vulkan_core.h>
-
-#include "local.hpp"
+#include "device.hpp"
+#include "error.hpp"
 
 namespace sat
 {
@@ -73,11 +72,6 @@ namespace sat
 		return *this;
 	}
 
-	rn<RenderPass> RenderPassBuilder::build() const
-	{
-		return rn<RenderPass>(new RenderPass(*this));
-	}
-
 	/////////////////////
 	//// Render Pass ////
 	/////////////////////
@@ -92,19 +86,12 @@ namespace sat
 		createInfo.attachmentCount = builder.attachments_.size();
 		createInfo.pAttachments    = builder.attachments_.data();
 
-		VK_CALL(vkCreateRenderPass(
-		            device_->handle(), &createInfo, nullptr, &handle_),
-		        "Failed to create render pass");
-
-		S_TRACE("Created render pass " S_PTR " with {} subpasses",
-		        S_THIS,
-		        builder.subpasses_.size());
+		SATURN_CALL(
+		    vkCreateRenderPass(device_, &createInfo, nullptr, &handle_));
 	}
 
 	RenderPass::~RenderPass() noexcept
 	{
-		vkDestroyRenderPass(device_->handle(), handle_, nullptr);
-
-		S_TRACE("Destroyed render pass " S_PTR, S_THIS);
+		vkDestroyRenderPass(device_, handle_, nullptr);
 	}
 } // namespace sat
