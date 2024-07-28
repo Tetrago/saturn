@@ -138,9 +138,9 @@ namespace sat
 	}
 
 	SwapchainBuilder& SwapchainBuilder::share(
-	    std::span<uint32_t const> queueFamilies) noexcept
+	    uint32_t queueFamilyIndex) noexcept
 	{
-		queueFamilies_.assign(queueFamilies.begin(), queueFamilies.end());
+		queueFamilies_.push_back(queueFamilyIndex);
 		return *this;
 	}
 
@@ -220,8 +220,8 @@ namespace sat
 		{
 			viewInfo.image = images_[count];
 
-			if (vkCreateImageView(
-			        device_, &viewInfo, nullptr, &views_[count]) != VK_SUCCESS)
+			SATURN_CALL_NO_THROW(
+			    vkCreateImageView(device_, &viewInfo, nullptr, &views_[count]))
 			{
 				goto abort;
 			}
@@ -254,15 +254,28 @@ namespace sat
 		vkDestroySwapchainKHR(device_, handle_, nullptr);
 	}
 
-	uint32_t Swapchain::acquireNextImage(const rn<Semaphore>& semaphore)
+	bool Swapchain::acquireNextImage(const rn<Semaphore>& semaphore,
+	                                 uint32_t& imageIndex)
 	{
-		uint32_t index;
-		SATURN_CALL(vkAcquireNextImageKHR(device_,
-		                                  handle_,
-		                                  std::numeric_limits<uint64_t>::max(),
-		                                  semaphore,
-		                                  VK_NULL_HANDLE,
-		                                  &index));
-		return index;
+		VkResult result =
+		    vkAcquireNextImageKHR(device_,
+		                          handle_,
+		                          std::numeric_limits<uint64_t>::max(),
+		                          semaphore,
+		                          VK_NULL_HANDLE,
+		                          &imageIndex);
+
+		if (result == VK_ERROR_OUT_OF_DATE_KHR)
+		{
+			return false;
+		}
+		else if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR)
+		{
+			return true;
+		}
+		else
+		{
+			throw std::runtime_error("Failed to acquire swap chain image");
+		}
 	}
 } // namespace sat

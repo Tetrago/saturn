@@ -4,6 +4,7 @@
 #include <saturn/saturn.hpp>
 #include <utility>
 
+#include "saturn/pipeline.hpp"
 #include "saturn/sync.hpp"
 
 namespace crit = sat::criterion;
@@ -114,7 +115,7 @@ int main()
 
 	if (graphicsQueueFamily != presentQueueFamily)
 	{
-		swapchainBuilder.share({{graphicsQueueFamily, presentQueueFamily}});
+		swapchainBuilder.share(graphicsQueueFamily).share(presentQueueFamily);
 	}
 
 	sat::rn<sat::Swapchain> swapchain = swapchainBuilder.build();
@@ -167,6 +168,12 @@ int main()
 	        .addStage(VK_SHADER_STAGE_FRAGMENT_BIT, frag)
 	        .addDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
 	        .addDynamicState(VK_DYNAMIC_STATE_SCISSOR)
+	        .vertexDescription(
+	            sat::VertexDescription()
+	                .begin(sizeof(float) * 5)
+	                .add(VK_FORMAT_R32G32_SFLOAT, 0)
+	                .add(VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 2)
+	                .end())
 	        .build();
 
 	/////////////////
@@ -179,6 +186,23 @@ int main()
 	                                     .build();
 
 	sat::CommandBuffer cmd = pool->allocate();
+
+	////////////////
+	//// Buffer ////
+	////////////////
+
+	sat::rn<sat::BufferPool> buffers =
+	    sat::BufferPoolBuilder(device, pool, graphics).build();
+
+	std::vector<float> vertices = {
+	    {0, -0.5f, 1, 1, 1, 0.5f, 0.5f, 0, 1, 0, -0.5f, 0.5f, 0, 0, 1}};
+
+	sat::rn<sat::Buffer> vertex = sat::BufferBuilder(buffers)
+	                                  .size(vertices.size() * sizeof(float))
+	                                  .usage(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)
+	                                  .build();
+
+	vertex->put<float>(vertices);
 
 	//////////////
 	//// Sync ////
@@ -194,6 +218,8 @@ int main()
 	//// Loop ////
 	//////////////
 
+	uint32_t imageIndex;
+
 	while (!glfwWindowShouldClose(pWindow))
 	{
 		glfwPollEvents();
@@ -201,8 +227,10 @@ int main()
 		inFlightFence->wait();
 		inFlightFence->reset();
 
-		uint32_t imageIndex =
-		    swapchain->acquireNextImage(imageAvailableSemaphore);
+		if (!swapchain->acquireNextImage(imageAvailableSemaphore, imageIndex))
+		{
+			// Re-create swapchain
+		}
 
 		////////////////
 		//// Record ////
@@ -212,7 +240,8 @@ int main()
 		cmd.record();
 		cmd.begin(renderPass, framebuffers[imageIndex], swapchain->extent());
 
-		cmd.bind(pipeline);
+		cmd.bindPipeline(pipeline);
+		cmd.bindVertexBuffer(vertex);
 		cmd.viewport(swapchain->extent());
 		cmd.scissor(swapchain->extent());
 		cmd.draw(3);
@@ -250,7 +279,7 @@ int main()
 		presentInfo.pSwapchains        = swapchain;
 		presentInfo.pImageIndices      = &imageIndex;
 
-		SATURN_CALL(vkQueuePresentKHR(present, &presentInfo));
+		vkQueuePresentKHR(present, &presentInfo);
 	}
 
 	/////////////////
@@ -262,6 +291,9 @@ int main()
 	inFlightFence.reset();
 	renderFinishedSemaphore.reset();
 	imageAvailableSemaphore.reset();
+
+	vertex.reset();
+	buffers.reset();
 
 	pool->free(cmd);
 	pool.reset();

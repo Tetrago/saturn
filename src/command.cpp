@@ -69,8 +69,11 @@ namespace sat
 
 	void CommandPool::free(CommandBuffer& buffer) const noexcept
 	{
-		vkFreeCommandBuffers(device_, handle_, 1, &buffer.handle_);
-		buffer = CommandBuffer();
+		if (buffer.handle_ != VK_NULL_HANDLE)
+		{
+			vkFreeCommandBuffers(device_, handle_, 1, &buffer.handle_);
+			buffer = CommandBuffer();
+		}
 	}
 
 	////////////////////////
@@ -95,10 +98,15 @@ namespace sat
 		return *this;
 	}
 
-	void CommandBuffer::record()
+	void CommandBuffer::record(bool oneTime)
 	{
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+		if (oneTime)
+		{
+			beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		}
 
 		SATURN_CALL(vkBeginCommandBuffer(handle_, &beginInfo));
 	}
@@ -113,8 +121,8 @@ namespace sat
 		SATURN_CALL(vkResetCommandBuffer(handle_, 0));
 	}
 
-	void CommandBuffer::begin(const rn<RenderPass>& renderPass,
-	                          const rn<Framebuffer>& framebuffer,
+	void CommandBuffer::begin(VkRenderPass renderPass,
+	                          VkFramebuffer framebuffer,
 	                          const VkExtent2D& extent,
 	                          const VkOffset2D& offset) noexcept
 	{
@@ -173,13 +181,40 @@ namespace sat
 		vkCmdSetScissor(handle_, 0, 1, &scissor);
 	}
 
-	void CommandBuffer::bind(const rn<Pipeline>& pipeline) noexcept
+	void CommandBuffer::bindPipeline(VkPipeline pipeline) noexcept
 	{
 		vkCmdBindPipeline(handle_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	}
+
+	void CommandBuffer::bindVertexBuffer(VkBuffer buffer,
+	                                     VkDeviceSize offset) noexcept
+	{
+		vkCmdBindVertexBuffers(handle_, 0, 1, &buffer, &offset);
 	}
 
 	void CommandBuffer::draw(uint32_t count, uint32_t index) noexcept
 	{
 		vkCmdDraw(handle_, count, 1, index, 0);
+	}
+
+	void CommandBuffer::copy(VkBuffer dst,
+	                         VkBuffer src,
+	                         VkDeviceSize size,
+	                         VkDeviceSize srcOffset,
+	                         VkDeviceSize dstOffset) noexcept
+	{
+		VkBufferCopy copy{};
+		copy.size      = size;
+		copy.srcOffset = srcOffset;
+		copy.dstOffset = dstOffset;
+
+		this->copy(dst, src, copy);
+	}
+
+	void CommandBuffer::copy(VkBuffer dst,
+	                         VkBuffer src,
+	                         const VkBufferCopy& copy) noexcept
+	{
+		vkCmdCopyBuffer(handle_, src, dst, 1, &copy);
 	}
 } // namespace sat

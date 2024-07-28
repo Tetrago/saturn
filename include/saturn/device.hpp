@@ -56,6 +56,8 @@ namespace sat
 
 		void waitIdle() const;
 
+		const rn<Instance>& instance() const noexcept { return instance_; }
+
 		const PhysicalDevice& device() const noexcept { return device_; }
 
 	private:

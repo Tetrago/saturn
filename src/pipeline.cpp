@@ -10,6 +10,49 @@
 
 namespace sat
 {
+	////////////////////////////
+	//// Vertex Description ////
+	////////////////////////////
+
+	VertexDescription& VertexDescription::begin(
+	    size_t size,
+	    VkVertexInputRate inputRate,
+	    std::optional<uint32_t> binding) noexcept
+	{
+		VkVertexInputBindingDescription desc{};
+		desc.binding   = binding.value_or(nextBinding_);
+		desc.stride    = size;
+		desc.inputRate = inputRate;
+
+		nextBinding_  = desc.binding + 1;
+		nextLocation_ = 0;
+		bindings_.push_back(desc);
+
+		return *this;
+	}
+
+	VertexDescription& VertexDescription::end() noexcept
+	{
+		return *this;
+	}
+
+	VertexDescription& VertexDescription::add(
+	    VkFormat format,
+	    size_t offset,
+	    std::optional<uint32_t> location) noexcept
+	{
+		VkVertexInputAttributeDescription desc{};
+		desc.binding  = bindings_.back().binding;
+		desc.location = location.value_or(nextLocation_);
+		desc.format   = format;
+		desc.offset   = offset;
+
+		nextLocation_ = desc.location + 1;
+		attributes_.push_back(desc);
+
+		return *this;
+	}
+
 	//////////////////////////
 	//// Pipeline Builder ////
 	//////////////////////////
@@ -72,6 +115,13 @@ namespace sat
 		return *this;
 	}
 
+	PipelineBuilder& PipelineBuilder::vertexDescription(
+	    const VertexDescription& description) noexcept
+	{
+		description_ = description;
+		return *this;
+	}
+
 	//////////////////
 	//// Pipeline ////
 	//////////////////
@@ -84,6 +134,14 @@ namespace sat
 		VkPipelineVertexInputStateCreateInfo vertexInputState{};
 		vertexInputState.sType =
 		    VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+		vertexInputState.vertexBindingDescriptionCount =
+		    builder.description_.bindings().size();
+		vertexInputState.pVertexBindingDescriptions =
+		    builder.description_.bindings().data();
+		vertexInputState.vertexAttributeDescriptionCount =
+		    builder.description_.attributes().size();
+		vertexInputState.pVertexAttributeDescriptions =
+		    builder.description_.attributes().data();
 
 		VkPipelineInputAssemblyStateCreateInfo inputAssemblyState{};
 		inputAssemblyState.sType =

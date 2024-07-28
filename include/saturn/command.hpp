@@ -4,14 +4,12 @@
 #include <vulkan/vulkan.h>
 
 #include "core.hpp"
-#include "saturn/framebuffer.hpp"
 
 namespace sat
 {
 	class CommandBuffer;
 	class CommandPool;
 	class Device;
-	class Pipeline;
 
 	//////////////////////////////
 	//// Command Pool Builder ////
@@ -72,12 +70,12 @@ namespace sat
 		CommandBuffer(CommandBuffer&& other) noexcept;
 		CommandBuffer& operator=(CommandBuffer&& other) noexcept;
 
-		void record();
+		void record(bool oneTime = false);
 		void stop();
 		void reset();
 
-		void begin(const rn<RenderPass>& renderPass,
-		           const rn<Framebuffer>& framebuffer,
+		void begin(VkRenderPass renderPass,
+		           VkFramebuffer framebuffer,
 		           const VkExtent2D& extent,
 		           const VkOffset2D& offset = {0, 0}) noexcept;
 		void end() noexcept;
@@ -92,9 +90,21 @@ namespace sat
 		             const VkOffset2D& offset = {0, 0}) noexcept;
 		void scissor(const VkRect2D& scissor) noexcept;
 
-		void bind(const rn<Pipeline>& pipeline) noexcept;
+		void bindPipeline(VkPipeline pipeline) noexcept;
+
+		void bindVertexBuffer(VkBuffer buffer,
+		                      VkDeviceSize offset = 0) noexcept;
 
 		void draw(uint32_t count, uint32_t index = 0) noexcept;
+
+		void copy(VkBuffer dst,
+		          VkBuffer src,
+		          VkDeviceSize size,
+		          VkDeviceSize srcOffset = 0,
+		          VkDeviceSize dstOffset = 0) noexcept;
+		void copy(VkBuffer dst,
+		          VkBuffer src,
+		          const VkBufferCopy& copy) noexcept;
 
 	private:
 		friend class CommandPool;

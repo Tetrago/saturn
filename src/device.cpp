@@ -1,6 +1,7 @@
 #include "device.hpp"
 
 #include <cstring>
+#include <ranges>
 
 #include "error.hpp"
 #include "instance.hpp"

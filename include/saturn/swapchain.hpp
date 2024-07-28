@@ -63,8 +63,7 @@ namespace sat
 		 */
 		SwapchainBuilder& usage(VkImageUsageFlags usage) noexcept;
 
-		SwapchainBuilder& share(
-		    std::span<uint32_t const> queueFamilies) noexcept;
+		SwapchainBuilder& share(uint32_t queueFamilyIndex) noexcept;
 
 	private:
 		friend class Swapchain;
@@ -77,7 +76,7 @@ namespace sat
 		VkExtent2D extent_{};
 		uint32_t imageCount_;
 		VkImageUsageFlags usage_;
-		std::vector<uint32_t> queueFamilies_{};
+		std::vector<uint32_t> queueFamilies_;
 	};
 
 	////////////////////
@@ -92,7 +91,13 @@ namespace sat
 		Swapchain(const Swapchain&)            = delete;
 		Swapchain& operator=(const Swapchain&) = delete;
 
-		uint32_t acquireNextImage(const rn<Semaphore>& semaphore);
+		/**
+		 * \brief Acquires the next image in the swap chain.
+		 *
+		 * \return True on success, false when swap chain is out of date.
+		 */
+		bool acquireNextImage(const rn<Semaphore>& semaphore,
+		                      uint32_t& imageIndex);
 
 		const std::vector<VkImageView>& views() const noexcept
 		{

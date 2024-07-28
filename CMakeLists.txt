@@ -2,12 +2,15 @@ cmake_minimum_required(VERSION 3.24)
 project(saturn LANGUAGES CXX)
 
 find_package(Vulkan REQUIRED)
+find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 
-set(libraries PUBLIC Vulkan::Vulkan)
+set(libraries PUBLIC Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator)
 
 set(definitions PRIVATE SATURN_BUILD)
 
 set(headers
+	"include/saturn/allocator.hpp"
+	"include/saturn/buffer.hpp"
 	"include/saturn/command.hpp"
 	"include/saturn/core.hpp"
 	"include/saturn/device.hpp"
@@ -24,6 +27,8 @@ set(headers
 )
 
 set(sources
+	"src/allocator.cpp"
+	"src/buffer.cpp"
 	"src/command.cpp"
 	"src/device.cpp"
 	"src/error.cpp"

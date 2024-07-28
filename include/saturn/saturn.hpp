@@ -1,6 +1,8 @@
 #ifndef SATURN_HPP
 #define SATURN_HPP
 
+#include "allocator.hpp"
+#include "buffer.hpp"
 #include "command.hpp"
 #include "core.hpp"
 #include "device.hpp"

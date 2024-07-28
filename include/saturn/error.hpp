@@ -13,15 +13,35 @@
 	throw ::sat::type(__FILE__, __LINE__, __VA_ARGS__)
 
 #ifndef NDEBUG
+	#include <iostream>
+
 	#define SATURN_CALL(call)                             \
 		([&]() {                                          \
-			VkResult res = (call);                        \
-			if (res != VK_SUCCESS)                        \
+			VkResult result = (call);                     \
+			if (result != VK_SUCCESS)                     \
 			{                                             \
 				throw ::sat::UnsuccessfulResultException( \
-					__FILE__, __LINE__, #call, res);      \
+					__FILE__, __LINE__, #call, result);   \
 			}                                             \
 		}())
+
+	#define SATURN_CALL_NO_THROW(call)                                  \
+		if ([&]() {                                                     \
+				VkResult result = (call);                               \
+				if (result != VK_SUCCESS)                               \
+				{                                                       \
+					std::cerr << ::sat::UnsuccessfulResultException(    \
+					                 __FILE__, __LINE__, #call, result) \
+					                 .what()                            \
+					          << std::endl;                             \
+                                                                        \
+					return true;                                        \
+				}                                                       \
+				else                                                    \
+				{                                                       \
+					return false;                                       \
+				}                                                       \
+		    }())
 
 	#define SATURN_GET(instance, function)                     \
 		([&]() {                                               \
@@ -43,6 +63,8 @@
 	#define SATURN_CALL(call)     \
 		if ((call) != VK_SUCCESS) \
 		throw std::runtime_error("Failed to call Vulkan function")
+
+	#define SATURN_CALL_NO_THROW(call) if ((call) != VK_SUCCESS)
 
 	#define SATURN_GET(instance, function)                                     \
 		([&]() {                                                               \

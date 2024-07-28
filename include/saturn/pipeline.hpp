@@ -3,6 +3,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include <optional>
+#include <span>
 #include <vector>
 
 #include "core.hpp"
@@ -14,6 +16,47 @@ namespace sat
 	class Pipeline;
 	class Shader;
 	class Swapchain;
+
+	////////////////////////////
+	//// Vertex Description ////
+	////////////////////////////
+
+	class SATURN_API VertexDescription
+	{
+	public:
+		VertexDescription() noexcept = default;
+
+		VertexDescription& begin(
+		    size_t size,
+		    VkVertexInputRate inputRate     = VK_VERTEX_INPUT_RATE_VERTEX,
+		    std::optional<uint32_t> binding = std::nullopt) noexcept;
+
+		VertexDescription& end() noexcept;
+
+		VertexDescription& add(
+		    VkFormat format,
+		    size_t offset,
+		    std::optional<uint32_t> location = std::nullopt) noexcept;
+
+		std::span<VkVertexInputBindingDescription const> bindings()
+		    const noexcept
+		{
+			return bindings_;
+		}
+
+		std::span<VkVertexInputAttributeDescription const> attributes()
+		    const noexcept
+		{
+			return attributes_;
+		}
+
+	private:
+		uint32_t nextBinding_ = 0;
+		uint32_t nextLocation_;
+
+		std::vector<VkVertexInputBindingDescription> bindings_;
+		std::vector<VkVertexInputAttributeDescription> attributes_;
+	};
 
 	//////////////////////////
 	//// Pipeline Builder ////
@@ -36,6 +79,8 @@ namespace sat
 		PipelineBuilder& polygonMode(VkPolygonMode polygonMode) noexcept;
 		PipelineBuilder& frontFace(VkFrontFace frontFace) noexcept;
 		PipelineBuilder& subpass(uint32_t subpass) noexcept;
+		PipelineBuilder& vertexDescription(
+		    const VertexDescription& description) noexcept;
 
 	private:
 		friend class Pipeline;
@@ -50,6 +95,7 @@ namespace sat
 		VkPolygonMode polygonMode_    = VK_POLYGON_MODE_FILL;
 		VkFrontFace frontFace_        = VK_FRONT_FACE_CLOCKWISE;
 		uint32_t subpass_             = 0;
+		VertexDescription description_;
 	};
 
 	//////////////////

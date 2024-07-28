@@ -1,7 +1,6 @@
 #include "instance.hpp"
 
 #include <cstring>
-#include <sstream>
 
 #include "error.hpp"
 #include "physical_device.hpp"
@@ -147,7 +146,7 @@ namespace sat
 		appInfo.applicationVersion = builder.appVersion_;
 		appInfo.pEngineName        = builder.engineName_.c_str();
 		appInfo.engineVersion      = builder.engineVersion_;
-		appInfo.apiVersion         = VK_API_VERSION_1_0;
+		appInfo.apiVersion         = VK_API_VERSION_1_2;
 
 		VkInstanceCreateInfo createInfo{};
 		createInfo.sType            = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -188,8 +187,11 @@ namespace sat
 			auto vkCreateDebugUtilsMessengerEXT =
 			    SATURN_GET(handle_, vkCreateDebugUtilsMessengerEXT);
 
-			SATURN_CALL(vkCreateDebugUtilsMessengerEXT(
-			    handle_, &messengerInfo, nullptr, &messenger_));
+			SATURN_CALL_NO_THROW(vkCreateDebugUtilsMessengerEXT(
+			    handle_, &messengerInfo, nullptr, &messenger_))
+			{
+				vkDestroyInstance(handle_, nullptr);
+			}
 		}
 #endif
 	}

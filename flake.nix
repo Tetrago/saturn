@@ -13,6 +13,7 @@
         shaderc
         vulkan-headers
         vulkan-loader
+        vulkan-memory-allocator
       ];
 
       packages = with pkgs; [
