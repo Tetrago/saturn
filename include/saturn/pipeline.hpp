@@ -2,6 +2,7 @@
 #define SATURN_PIPELINE_HPP
 
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 #include <optional>
 #include <span>
@@ -58,6 +59,31 @@ namespace sat
 		std::vector<VkVertexInputAttributeDescription> attributes_;
 	};
 
+	///////////////////////////
+	//// Descriptor Layout ////
+	///////////////////////////
+
+	class SATURN_API DescriptorLayout
+	{
+	public:
+		DescriptorLayout() noexcept = default;
+
+		DescriptorLayout& add(
+		    VkDescriptorType type,
+		    VkShaderStageFlags stages,
+		    uint32_t count                  = 1,
+		    std::optional<uint32_t> binding = std::nullopt) noexcept;
+
+		std::span<VkDescriptorSetLayoutBinding const> bindings() const noexcept
+		{
+			return bindings_;
+		}
+
+	private:
+		uint32_t nextBinding_ = 0;
+		std::vector<VkDescriptorSetLayoutBinding> bindings_;
+	};
+
 	//////////////////////////
 	//// Pipeline Builder ////
 	//////////////////////////
@@ -81,6 +107,8 @@ namespace sat
 		PipelineBuilder& subpass(uint32_t subpass) noexcept;
 		PipelineBuilder& vertexDescription(
 		    const VertexDescription& description) noexcept;
+		PipelineBuilder& descriptorLayout(
+		    const DescriptorLayout& layout) noexcept;
 
 	private:
 		friend class Pipeline;
@@ -96,6 +124,7 @@ namespace sat
 		VkFrontFace frontFace_        = VK_FRONT_FACE_CLOCKWISE;
 		uint32_t subpass_             = 0;
 		VertexDescription description_;
+		DescriptorLayout layout_;
 	};
 
 	//////////////////
@@ -118,7 +147,8 @@ namespace sat
 		rn<Device> device_;
 		rn<Swapchain> swapchain_;
 		rn<RenderPass> renderPass_;
-		VkPipelineLayout layout_;
+		VkDescriptorSetLayout descriptorLayout_;
+		VkPipelineLayout pipelineLayout_;
 	};
 } // namespace sat
 

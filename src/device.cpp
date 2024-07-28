@@ -75,10 +75,32 @@ namespace sat
 
 		SATURN_CALL(
 		    vkCreateDevice(device_.handle, &createInfo, nullptr, &handle_));
+
+		///////////////////
+		//// Allocator ////
+		///////////////////
+
+		VmaVulkanFunctions functions{};
+		functions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
+		functions.vkGetDeviceProcAddr   = &vkGetDeviceProcAddr;
+
+		VmaAllocatorCreateInfo allocatorInfo{};
+		allocatorInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+		allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_2;
+		allocatorInfo.physicalDevice   = device_.handle;
+		allocatorInfo.device           = handle_;
+		allocatorInfo.instance         = instance_;
+		allocatorInfo.pVulkanFunctions = &functions;
+
+		SATURN_CALL_NO_THROW(vmaCreateAllocator(&allocatorInfo, &allocator_))
+		{
+			vkDestroyDevice(handle_, nullptr);
+		}
 	}
 
 	Device::~Device() noexcept
 	{
+		vmaDestroyAllocator(allocator_);
 		vkDestroyDevice(handle_, nullptr);
 	}
 

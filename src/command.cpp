@@ -229,4 +229,76 @@ namespace sat
 	{
 		vkCmdCopyBuffer(handle_, src, dst, 1, &copy);
 	}
+
+	////////////////////////////////////
+	//// Command Dispatcher Builder ////
+	////////////////////////////////////
+
+	CommandDispatcherBuilder::CommandDispatcherBuilder(
+	    rn<CommandPool> pool) noexcept
+	    : pool_(std::move(pool))
+	{}
+
+	CommandDispatcherBuilder& CommandDispatcherBuilder::count(
+	    unsigned count) noexcept
+	{
+		count_ = count;
+		return *this;
+	}
+
+	////////////////////////////
+	//// Command Dispatcher ////
+	////////////////////////////
+
+	CommandDispatcher::Lease::Lease(CommandDispatcher* pDispatcher) noexcept
+	    : dispatcher_(pDispatcher), buffer_(dispatcher_->acquire())
+	{}
+
+	CommandDispatcher::Lease::~Lease() noexcept
+	{
+		dispatcher_->release(std::move(buffer_));
+	}
+
+	CommandDispatcher::CommandDispatcher(
+	    const CommandDispatcherBuilder& builder) noexcept
+	    : pool_(builder.pool_), available_(builder.count_)
+	{
+		for (unsigned i = 0; i < builder.count_; ++i)
+		{
+			buffers_.push(pool_->allocate());
+		}
+	}
+
+	CommandDispatcher::~CommandDispatcher() noexcept
+	{
+		while (!buffers_.empty())
+		{
+			pool_->free(buffers_.top());
+			buffers_.pop();
+		}
+	}
+
+	CommandDispatcher::Lease CommandDispatcher::lease() noexcept
+	{
+		return Lease(this);
+	}
+
+	CommandBuffer CommandDispatcher::acquire() noexcept
+	{
+		available_.acquire();
+		std::lock_guard lock(mutex_);
+
+		CommandBuffer cmd = std::move(buffers_.top());
+		buffers_.pop();
+
+		return cmd;
+	}
+
+	void CommandDispatcher::release(CommandBuffer&& buffer) noexcept
+	{
+		std::lock_guard lock(mutex_);
+
+		buffers_.push(std::move(buffer));
+		available_.release();
+	}
 } // namespace sat

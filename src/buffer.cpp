@@ -5,58 +5,120 @@
 #include "command.hpp"
 #include "device.hpp"
 #include "error.hpp"
-#include "instance.hpp"
 #include "sync.hpp"
 
 namespace sat
 {
-	/////////////////////////////
-	//// Buffer Pool Builder ////
-	/////////////////////////////
+	///////////////////////
+	//// Mapped Buffer ////
+	///////////////////////
 
-	BufferPoolBuilder::BufferPoolBuilder(rn<Device> device,
-	                                     rn<CommandPool> commandPool,
-	                                     VkQueue queue) noexcept
-	    : device_(std::move(device)),
-	      commandPool_(std::move(commandPool)),
-	      queue_(queue)
+	class MappedBuffer : public Buffer
+	{
+	public:
+		MappedBuffer(rn<Device> device,
+		             VkDeviceSize size,
+		             VkBufferUsageFlags usage,
+		             std::span<uint32_t const> queueFamilyIndices);
+
+		MappedBuffer(const MappedBuffer&)            = delete;
+		MappedBuffer& operator=(const MappedBuffer&) = delete;
+
+		void put(const void* pData, size_t size, size_t offset) override;
+	};
+
+	MappedBuffer::MappedBuffer(rn<Device> device,
+	                           VkDeviceSize size,
+	                           VkBufferUsageFlags usage,
+	                           std::span<uint32_t const> queueFamilyIndices)
+	    : Buffer(std::move(device),
+	             size,
+	             usage,
+	             queueFamilyIndices,
+	             VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
 	{}
 
-	/////////////////////
-	//// Buffer Pool ////
-	/////////////////////
-
-	BufferPool::BufferPool(const BufferPoolBuilder& builder) noexcept
-	    : device_(builder.device_),
-	      commandPool_(builder.commandPool_),
-	      queue_(builder.queue_)
+	void MappedBuffer::put(const void* pData, size_t size, size_t offset)
 	{
-		VmaVulkanFunctions functions{};
-		functions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
-		functions.vkGetDeviceProcAddr   = &vkGetDeviceProcAddr;
+		void* pMap;
+		SATURN_CALL(vmaMapMemory(device_->allocator(), allocation_, &pMap));
 
-		VmaAllocatorCreateInfo createInfo{};
-		createInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
-		createInfo.vulkanApiVersion = VK_API_VERSION_1_2;
-		createInfo.physicalDevice   = device_->device().handle;
-		createInfo.device           = device_;
-		createInfo.instance         = device_->instance()->handle();
-		createInfo.pVulkanFunctions = &functions;
+		std::memcpy(static_cast<uint8_t*>(pMap) + offset, pData, size);
 
-		SATURN_CALL(vmaCreateAllocator(&createInfo, &allocator_));
+		vmaUnmapMemory(device_->allocator(), allocation_);
 	}
 
-	BufferPool::~BufferPool() noexcept
+	///////////////////////
+	//// Staged Buffer ////
+	///////////////////////
+
+	class StagedBuffer : public Buffer
 	{
-		vmaDestroyAllocator(allocator_);
+	public:
+		StagedBuffer(rn<Device> device,
+		             VkQueue queue,
+		             rn<CommandDispatcher> dispatcher,
+		             VkDeviceSize size,
+		             VkBufferUsageFlags usage,
+		             std::span<uint32_t const> queueFamilyIndices);
+
+		StagedBuffer(const StagedBuffer&)            = delete;
+		StagedBuffer& operator=(const StagedBuffer&) = delete;
+
+		void put(const void* pData, size_t size, size_t offset) override;
+
+	private:
+		VkQueue queue_;
+		rn<CommandDispatcher> dispatcher_;
+		MappedBuffer staging_;
+	};
+
+	StagedBuffer::StagedBuffer(rn<Device> device,
+	                           VkQueue queue,
+	                           rn<CommandDispatcher> dispatcher,
+	                           VkDeviceSize size,
+	                           VkBufferUsageFlags usage,
+	                           std::span<uint32_t const> queueFamilyIndices)
+	    : queue_(queue),
+	      dispatcher_(dispatcher),
+	      Buffer(device,
+	             size,
+	             usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+	             queueFamilyIndices,
+	             VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT),
+	      staging_(std::move(device),
+	               size,
+	               usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+	               {})
+	{}
+
+	void StagedBuffer::put(const void* pData, size_t size, size_t offset)
+	{
+		staging_.put(pData, size, offset);
+		auto cmd = dispatcher_->lease();
+
+		cmd->record(true);
+		cmd->copy(handle_, staging_.handle(), size_);
+		cmd->stop();
+
+		VkSubmitInfo submitInfo{};
+		submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers    = *cmd;
+
+		rn<Fence> fence = sync::fence(device_);
+
+		vkQueueSubmit(queue_, 1, &submitInfo, fence);
+
+		fence->wait();
 	}
 
 	///////////////////////
 	/// Buffer Builder ////
 	///////////////////////
 
-	BufferBuilder::BufferBuilder(rn<BufferPool> pool) noexcept
-	    : pool_(std::move(pool))
+	BufferBuilder::BufferBuilder(rn<Device> device) noexcept
+	    : device_(std::move(device))
 	{}
 
 	BufferBuilder& BufferBuilder::size(VkDeviceSize size) noexcept
@@ -77,94 +139,75 @@ namespace sat
 		return *this;
 	}
 
+	BufferBuilder& BufferBuilder::staged(
+	    VkQueue queue, rn<CommandDispatcher> dispatcher) noexcept
+	{
+		staged_     = true;
+		queue_      = queue;
+		dispatcher_ = std::move(dispatcher);
+
+		return *this;
+	}
+
+	rn<Buffer> BufferBuilder::build() const
+	{
+		if (staged_)
+		{
+			return rn<Buffer>(new StagedBuffer(device_,
+			                                   queue_,
+			                                   dispatcher_,
+			                                   size_,
+			                                   usage_,
+			                                   queueFamilyIndices_));
+		}
+		else
+		{
+			return rn<Buffer>(
+			    new MappedBuffer(device_, size_, usage_, queueFamilyIndices_));
+		}
+	}
+
 	////////////////
 	//// Buffer ////
 	////////////////
 
-	Buffer::Buffer(const BufferBuilder& builder)
-	    : pool_(builder.pool_), size_(builder.size_)
+	Buffer::Buffer(rn<Device> device,
+	               VkDeviceSize size,
+	               VkBufferUsageFlags usage,
+	               std::span<uint32_t const> queueFamilyIndices,
+	               VmaAllocationCreateFlags flags)
+	    : device_(std::move(device)), size_(size)
 	{
 		VkBufferCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		createInfo.size  = size_;
-		createInfo.usage = builder.usage_ | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+		createInfo.usage = usage;
 
-		if (builder.queueFamilyIndices_.empty())
+		if (queueFamilyIndices.empty())
 		{
 			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		}
 		else
 		{
-			createInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
-			createInfo.queueFamilyIndexCount =
-			    builder.queueFamilyIndices_.size();
-			createInfo.pQueueFamilyIndices = builder.queueFamilyIndices_.data();
+			createInfo.sharingMode           = VK_SHARING_MODE_CONCURRENT;
+			createInfo.queueFamilyIndexCount = queueFamilyIndices.size();
+			createInfo.pQueueFamilyIndices   = queueFamilyIndices.data();
 		}
 
 		VmaAllocationCreateInfo allocInfo{};
 		allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
-		allocInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+		allocInfo.flags = flags;
 
-		SATURN_CALL(vmaCreateBuffer(pool_->allocator_,
+		SATURN_CALL(vmaCreateBuffer(device_->allocator(),
 		                            &createInfo,
 		                            &allocInfo,
 		                            &handle_,
 		                            &allocation_,
 		                            nullptr));
-
-		/////////////////
-		//// Staging ////
-		/////////////////
-
-		createInfo             = {};
-		createInfo.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		createInfo.size        = size_;
-		createInfo.usage       = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-		createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-		allocInfo       = {};
-		allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
-		allocInfo.flags =
-		    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-		    VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
-		SATURN_CALL(vmaCreateBuffer(pool_->allocator_,
-		                            &createInfo,
-		                            &allocInfo,
-		                            &stagingHandle_,
-		                            &stagingAllocation_,
-		                            &allocInfo_));
 	}
 
 	Buffer::~Buffer() noexcept
 	{
-		vmaDestroyBuffer(pool_->allocator_, stagingHandle_, stagingAllocation_);
-		vmaDestroyBuffer(pool_->allocator_, handle_, allocation_);
-	}
-
-	void Buffer::put(const void* pData, size_t size, size_t offset) noexcept
-	{
-		std::memcpy(static_cast<uint8_t*>(allocInfo_.pMappedData) + offset,
-		            pData,
-		            size);
-
-		CommandBuffer cmd = pool_->commandPool_->allocate();
-
-		cmd.record(true);
-		cmd.copy(handle_, stagingHandle_, size_);
-		cmd.stop();
-
-		VkSubmitInfo submitInfo{};
-		submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submitInfo.commandBufferCount = 1;
-		submitInfo.pCommandBuffers    = cmd;
-
-		rn<Fence> fence = sync::fence(pool_->device_);
-
-		vkQueueSubmit(pool_->queue_, 1, &submitInfo, fence);
-
-		fence->wait();
-
-		pool_->commandPool_->free(cmd);
+		vmaDestroyBuffer(device_->allocator(), handle_, allocation_);
 	}
 } // namespace sat

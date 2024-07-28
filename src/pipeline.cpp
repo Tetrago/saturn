@@ -53,6 +53,28 @@ namespace sat
 		return *this;
 	}
 
+	///////////////////////////
+	//// Descriptor Layout ////
+	///////////////////////////
+
+	DescriptorLayout& DescriptorLayout::add(
+	    VkDescriptorType type,
+	    VkShaderStageFlags stages,
+	    uint32_t count,
+	    std::optional<uint32_t> binding) noexcept
+	{
+		VkDescriptorSetLayoutBinding layout{};
+		layout.binding         = binding.value_or(nextBinding_);
+		layout.descriptorType  = type;
+		layout.descriptorCount = count;
+		layout.stageFlags      = stages;
+
+		nextBinding_ = layout.binding + 1;
+		bindings_.push_back(layout);
+
+		return *this;
+	}
+
 	//////////////////////////
 	//// Pipeline Builder ////
 	//////////////////////////
@@ -119,6 +141,13 @@ namespace sat
 	    const VertexDescription& description) noexcept
 	{
 		description_ = description;
+		return *this;
+	}
+
+	PipelineBuilder& PipelineBuilder::descriptorLayout(
+	    const DescriptorLayout& layout) noexcept
+	{
+		layout_ = layout;
 		return *this;
 	}
 
@@ -201,20 +230,6 @@ namespace sat
 		colorBlendState.attachmentCount = 1;
 		colorBlendState.pAttachments    = &colorBlendAttachment;
 
-		////////////////
-		//// Layout ////
-		////////////////
-
-		VkPipelineLayoutCreateInfo layoutInfo{};
-		layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-
-		SATURN_CALL(
-		    vkCreatePipelineLayout(device_, &layoutInfo, nullptr, &layout_));
-
-		//////////////////
-		//// Pipeline ////
-		//////////////////
-
 		VkGraphicsPipelineCreateInfo createInfo{};
 		createInfo.sType      = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 		createInfo.stageCount = builder.stages_.size();
@@ -226,17 +241,63 @@ namespace sat
 		createInfo.pMultisampleState   = &multisampleState;
 		createInfo.pColorBlendState    = &colorBlendState;
 		createInfo.pDynamicState       = &dynamicState;
-		createInfo.layout              = layout_;
 		createInfo.renderPass          = renderPass_;
 		createInfo.subpass             = builder.subpass_;
 
-		SATURN_CALL(vkCreateGraphicsPipelines(
-		    device_, VK_NULL_HANDLE, 1, &createInfo, nullptr, &handle_));
+		///////////////////////////////
+		//// Descriptor Set Layout ////
+		///////////////////////////////
+
+		VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo{};
+		descriptorLayoutInfo.sType =
+		    VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		descriptorLayoutInfo.bindingCount = builder.layout_.bindings().size();
+		descriptorLayoutInfo.pBindings    = builder.layout_.bindings().data();
+
+		SATURN_CALL(vkCreateDescriptorSetLayout(
+		    device_, &descriptorLayoutInfo, nullptr, &descriptorLayout_));
+
+		/////////////////////////
+		//// Pipeline Layout ////
+		/////////////////////////
+
+		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+		pipelineLayoutInfo.sType =
+		    VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutInfo.setLayoutCount = 1;
+		pipelineLayoutInfo.pSetLayouts    = &descriptorLayout_;
+
+		SATURN_CALL_NO_THROW(vkCreatePipelineLayout(
+		    device_, &pipelineLayoutInfo, nullptr, &pipelineLayout_))
+		{
+			goto layout_failed;
+		}
+
+		//////////////////
+		//// Pipeline ////
+		//////////////////
+
+		createInfo.layout = pipelineLayout_;
+
+		SATURN_CALL_NO_THROW(vkCreateGraphicsPipelines(
+		    device_, VK_NULL_HANDLE, 1, &createInfo, nullptr, &handle_))
+		{
+			goto pipeline_failed;
+		}
+
+		return;
+
+	layout_failed:
+		vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
+
+	pipeline_failed:
+		vkDestroyPipeline(device_, handle_, nullptr);
 	}
 
 	Pipeline::~Pipeline() noexcept
 	{
 		vkDestroyPipeline(device_, handle_, nullptr);
-		vkDestroyPipelineLayout(device_, layout_, nullptr);
+		vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
+		vkDestroyDescriptorSetLayout(device_, descriptorLayout_, nullptr);
 	}
 } // namespace sat

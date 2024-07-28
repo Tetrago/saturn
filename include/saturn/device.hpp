@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "allocator.hpp"
 #include "core.hpp"
 #include "physical_device.hpp"
 
@@ -56,9 +57,9 @@ namespace sat
 
 		void waitIdle() const;
 
-		const rn<Instance>& instance() const noexcept { return instance_; }
-
 		const PhysicalDevice& device() const noexcept { return device_; }
+
+		VmaAllocator allocator() const noexcept { return allocator_; }
 
 	private:
 		friend class Builder<DeviceBuilder, Device>;
@@ -67,6 +68,7 @@ namespace sat
 
 		rn<Instance> instance_;
 		PhysicalDevice device_;
+		VmaAllocator allocator_;
 	};
 } // namespace sat
 

@@ -3,11 +3,16 @@
 
 #include <vulkan/vulkan.h>
 
+#include <mutex>
+#include <semaphore>
+#include <stack>
+
 #include "core.hpp"
 
 namespace sat
 {
 	class CommandBuffer;
+	class CommandDispatcher;
 	class CommandPool;
 	class Device;
 
@@ -116,6 +121,81 @@ namespace sat
 		friend class CommandPool;
 
 		explicit CommandBuffer(VkCommandBuffer handle);
+	};
+
+	////////////////////////////////////
+	//// Command Dispatcher Builder ////
+	////////////////////////////////////
+
+	class SATURN_API CommandDispatcherBuilder
+	    : public Builder<CommandDispatcherBuilder, CommandDispatcher>
+	{
+	public:
+		CommandDispatcherBuilder(rn<CommandPool> pool) noexcept;
+
+		CommandDispatcherBuilder& count(unsigned count) noexcept;
+
+	private:
+		friend class CommandDispatcher;
+
+		rn<CommandPool> pool_;
+		unsigned count_ = 1;
+	};
+
+	////////////////////////////
+	//// Command Dispatcher ////
+	////////////////////////////
+
+	class SATURN_API CommandDispatcher
+	{
+	public:
+		class SATURN_API Lease
+		{
+		public:
+			~Lease() noexcept;
+
+			Lease(const Lease&)            = delete;
+			Lease& operator=(const Lease&) = delete;
+
+			CommandBuffer* operator->() noexcept { return &buffer_; }
+
+			const CommandBuffer* operator->() const noexcept
+			{
+				return &buffer_;
+			}
+
+			const CommandBuffer& operator*() const noexcept { return buffer_; }
+
+		private:
+			friend class CommandDispatcher;
+
+			Lease(CommandDispatcher* pDispatcher) noexcept;
+
+			CommandDispatcher* dispatcher_;
+			CommandBuffer buffer_;
+		};
+
+		~CommandDispatcher() noexcept;
+
+		CommandDispatcher(const CommandDispatcher&)            = delete;
+		CommandDispatcher& operator=(const CommandDispatcher&) = delete;
+
+		Lease lease() noexcept;
+
+	private:
+		friend class Builder<CommandDispatcherBuilder, CommandDispatcher>;
+		friend class Lease;
+
+		explicit CommandDispatcher(
+		    const CommandDispatcherBuilder& builder) noexcept;
+
+		CommandBuffer acquire() noexcept;
+		void release(CommandBuffer&& buffer) noexcept;
+
+		rn<CommandPool> pool_;
+		std::stack<CommandBuffer> buffers_;
+		std::binary_semaphore available_;
+		std::mutex mutex_;
 	};
 } // namespace sat
 

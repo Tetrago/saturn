@@ -44,6 +44,7 @@ namespace sat
 	class Wranger
 	{
 	public:
+		Wranger() noexcept = default;
 		explicit Wranger(T* ptr) noexcept;
 
 		template <typename U>

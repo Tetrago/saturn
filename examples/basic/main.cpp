@@ -191,8 +191,8 @@ int main()
 	//// Buffer ////
 	////////////////
 
-	sat::rn<sat::BufferPool> buffers =
-	    sat::BufferPoolBuilder(device, pool, graphics).build();
+	sat::rn<sat::CommandDispatcher> dispatcher =
+	    sat::CommandDispatcherBuilder(pool).count(1).build();
 
 	/* clang-format off */
 	std::vector<float> vertices = {
@@ -208,18 +208,20 @@ int main()
     };
 	/* clang-format on */
 
-	sat::rn<sat::Buffer> vertex = sat::BufferBuilder(buffers)
+	sat::rn<sat::Buffer> vertex = sat::BufferBuilder(device)
 	                                  .size(vertices.size() * sizeof(float))
 	                                  .usage(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)
+	                                  .staged(graphics, dispatcher)
 	                                  .build();
 
-	sat::rn<sat::Buffer> index = sat::BufferBuilder(buffers)
+	sat::rn<sat::Buffer> index = sat::BufferBuilder(device)
 	                                 .size(indices.size() * sizeof(uint32_t))
 	                                 .usage(VK_BUFFER_USAGE_INDEX_BUFFER_BIT)
+	                                 .staged(graphics, dispatcher)
 	                                 .build();
 
-	vertex->put<float>(vertices);
-	index->put<uint32_t>(indices);
+	vertex->put(vertices);
+	index->put(indices);
 
 	//////////////
 	//// Sync ////
@@ -310,8 +312,9 @@ int main()
 	renderFinishedSemaphore.reset();
 	imageAvailableSemaphore.reset();
 
+	index.reset();
 	vertex.reset();
-	buffers.reset();
+	dispatcher.reset();
 
 	pool->free(cmd);
 	pool.reset();
