@@ -95,7 +95,13 @@ namespace sat
 		void bindVertexBuffer(VkBuffer buffer,
 		                      VkDeviceSize offset = 0) noexcept;
 
+		void bindIndexBuffer(VkBuffer buffer,
+		                     VkDeviceSize offset = 0,
+		                     VkIndexType type = VK_INDEX_TYPE_UINT32) noexcept;
+
 		void draw(uint32_t count, uint32_t index = 0) noexcept;
+
+		void drawIndexed(uint32_t count, uint32_t index = 0) noexcept;
 
 		void copy(VkBuffer dst,
 		          VkBuffer src,

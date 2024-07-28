@@ -192,9 +192,21 @@ namespace sat
 		vkCmdBindVertexBuffers(handle_, 0, 1, &buffer, &offset);
 	}
 
+	void CommandBuffer::bindIndexBuffer(VkBuffer buffer,
+	                                    VkDeviceSize offset,
+	                                    VkIndexType type) noexcept
+	{
+		vkCmdBindIndexBuffer(handle_, buffer, offset, type);
+	}
+
 	void CommandBuffer::draw(uint32_t count, uint32_t index) noexcept
 	{
 		vkCmdDraw(handle_, count, 1, index, 0);
+	}
+
+	void CommandBuffer::drawIndexed(uint32_t count, uint32_t index) noexcept
+	{
+		vkCmdDrawIndexed(handle_, count, 1, index, 0, 0);
 	}
 
 	void CommandBuffer::copy(VkBuffer dst,

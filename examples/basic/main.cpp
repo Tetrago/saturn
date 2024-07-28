@@ -194,15 +194,32 @@ int main()
 	sat::rn<sat::BufferPool> buffers =
 	    sat::BufferPoolBuilder(device, pool, graphics).build();
 
+	/* clang-format off */
 	std::vector<float> vertices = {
-	    {0, -0.5f, 1, 1, 1, 0.5f, 0.5f, 0, 1, 0, -0.5f, 0.5f, 0, 0, 1}};
+        -0.5f, -0.5f, 1, 0, 1,
+        0.5f, -0.5f, 0, 1, 0,
+        0.5f, 0.5f, 0, 0, 1,
+        -0.5f, 0.5f, 1, 1, 1
+    };
+
+    std::vector<uint32_t> indices = {
+        0, 1, 2,
+        2, 3, 0
+    };
+	/* clang-format on */
 
 	sat::rn<sat::Buffer> vertex = sat::BufferBuilder(buffers)
 	                                  .size(vertices.size() * sizeof(float))
 	                                  .usage(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)
 	                                  .build();
 
+	sat::rn<sat::Buffer> index = sat::BufferBuilder(buffers)
+	                                 .size(indices.size() * sizeof(uint32_t))
+	                                 .usage(VK_BUFFER_USAGE_INDEX_BUFFER_BIT)
+	                                 .build();
+
 	vertex->put<float>(vertices);
+	index->put<uint32_t>(indices);
 
 	//////////////
 	//// Sync ////
@@ -242,9 +259,10 @@ int main()
 
 		cmd.bindPipeline(pipeline);
 		cmd.bindVertexBuffer(vertex);
+		cmd.bindIndexBuffer(index);
 		cmd.viewport(swapchain->extent());
 		cmd.scissor(swapchain->extent());
-		cmd.draw(3);
+		cmd.drawIndexed(indices.size());
 
 		cmd.end();
 		cmd.stop();
